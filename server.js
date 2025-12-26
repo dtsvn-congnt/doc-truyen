@@ -97,11 +97,14 @@ async function handleTTS(text, res) {
         // Nhưng google-tts-api tự xử lý split, chỉ cần đảm bảo server không timeout
         
         const results = await googleTTS.getAllAudioBase64(text, {
-            lang: 'vi',
-            slow: false,
-            host: 'https://translate.google.com',
-            splitPunct: ',.?!',
-        });
+			lang: 'vi',
+			slow: false,
+			// 1. Dùng domain global hoặc domain API này thường ít bị chặn hơn
+			host: 'https://translate.googleapis.com', 
+			// 2. Tăng timeout lên 20 giây (Render free tier mạng khởi động hơi chậm)
+			timeout: 30000,
+			splitPunct: ',.?!',
+		});
         
         const combinedBase64 = results.map(item => item.base64).join('');
         const audioBuffer = Buffer.from(combinedBase64, 'base64');
