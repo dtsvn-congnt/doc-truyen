@@ -37,13 +37,13 @@ app.get('/api/speak', async (req, res) => {
     // }
     try {
     const browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        timeout: 0
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    timeout: 0
     });
     const page = await browser.newPage();
     console.log(req.query.url);
-    await page.goto(req.query.url, { waitUntil: 'domcontentloaded' });
+    await page.goto(req.query.url, { waitUntil: 'networkidle2' });
     
 // 3. Lấy nội dung (Lấy tất cả thẻ <p> và ghép lại)
     const result = await page.evaluate(() => {
