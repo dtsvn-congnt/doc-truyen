@@ -73,9 +73,12 @@ app.get('/api/speak', async (req, res) => {
             // Lấy thuộc tính href (link) nếu tìm thấy
             const nextLink = nextElement ? nextElement.href : null;
 
-            return { content, nextLink };
+            const fullHTML = document.documentElement.outerHTML;
+
+            return { content, nextLink , fullHTML};
     });
 
+    console.log(result.fullHTML);
     // 2. Lấy LINK NEXT CHAPTER (Theo yêu cầu của bạn)
             // Tìm thẻ <a> có class là "next-chapter"
     
