@@ -38,10 +38,19 @@ app.get('/api/speak', async (req, res) => {
     try {
     const browser = await puppeteer.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     timeout: 0
     });
     const page = await browser.newPage();
+
+    // 1. GIẢ LẬP NGƯỜI DÙNG THẬT (Rất quan trọng để không bị chặn)
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        
+        // Đặt thêm Header tiếng Việt để web tin tưởng
+        await page.setExtraHTTPHeaders({
+            'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7'
+        });
+
     console.log(req.query.url);
     await page.goto(req.query.url, { waitUntil: 'networkidle2' });
     
