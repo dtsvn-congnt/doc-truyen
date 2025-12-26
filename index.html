@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Auto Novel Reader (Fix URL)</title>
+    <title>Auto Novel Reader (Siêu Tốc)</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; padding-top: 30px; background: #f4f4f4; }
         .container { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 90%; max-width: 600px; text-align: center; }
@@ -67,16 +67,18 @@
         const speedInput = document.getElementById('speedInput');
         const speedLabel = document.getElementById('speedLabel');
 
-        // Xử lý thanh trượt tốc độ
+        // BIẾN QUAN TRỌNG: Kho chứa dữ liệu tải ngầm
+        let preloadedData = null; 
+
+        // 1. Xử lý thanh trượt tốc độ
         speedInput.oninput = function() {
             const val = this.value;
             speedLabel.innerText = val + 'x';
             audioPlayer.playbackRate = val; 
         };
 
-        // Hàm chính
+        // 2. Hàm chính: Bắt đầu đọc
         async function startReading(urlOverride = null) {
-            // Nếu có urlOverride (tức là chuyển bài), dùng nó. Nếu không thì dùng cái trong textbox.
             const currentUrl = urlOverride || urlInput.value;
             
             if (!currentUrl) {
@@ -84,54 +86,45 @@
                 return;
             }
 
-            // CẬP NHẬT UI NGAY LẬP TỨC: TextBox phải hiện URL đang xử lý
+            // Cập nhật giao diện
             urlInput.value = currentUrl; 
-
-            log.innerText = "⏳ Đang cào dữ liệu & tạo giọng nói...";
             btnStart.disabled = true;
             btnNext.style.display = 'none';
-            
-            // Dừng nhạc cũ
-            audioPlayer.pause();
-            audioPlayer.src = "";
 
-            try {
-                // Gọi API
-                const response = await fetch(`/api/speak?url=${encodeURIComponent(currentUrl)}`);
+            // --- A. KIỂM TRA HÀNG TỒN KHO (PRELOAD) ---
+            if (preloadedData && preloadedData.url === currentUrl) {
+                console.log("⚡ Dùng hàng đã tải sẵn (Instant Play)");
+                log.innerText = "⚡ Đang phát (Không cần tải lại)...";
+                
+                // Phát ngay lập tức
+                playAudio(preloadedData.blobUrl, preloadedData.nextLink);
 
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(errorText || "Lỗi kết nối Server");
+                // Đi tải ngầm chương KẾ TIẾP NỮA (Gối đầu)
+                if (preloadedData.nextLink) {
+                    prefetchNext(preloadedData.nextLink);
                 }
 
-                // Lấy header X-Next-Url (Link chương sau)
-                const nextLinkHeader = response.headers.get('X-Next-Url');
-                const nextLink = nextLinkHeader ? decodeURI(nextLinkHeader) : null;
-
-                // Lấy Audio Blob
-                const audioBlob = await response.blob();
-                const audioUrl = URL.createObjectURL(audioBlob);
-
-                // Cập nhật trạng thái
-                log.innerText = nextLink ? "✅ Đã tải xong! Có chương tiếp theo." : "✅ Đã tải xong! (Hết truyện)";
+                // Xả kho
+                preloadedData = null;
+                btnStart.disabled = false;
+                return;
+            }
+            
+            // --- B. NẾU KHÔNG CÓ SẴN (Lần đầu chạy) ---
+            log.innerText = "⏳ Đang tải dữ liệu...";
+            audioPlayer.pause();
+            
+            try {
+                // Tải chương hiện tại
+                const data = await fetchChapter(currentUrl);
                 
-                // Phát nhạc
-                audioPlayer.src = audioUrl;
-                
-                // Giữ tốc độ khi phát bài mới
-                audioPlayer.onplay = () => {
-                    audioPlayer.playbackRate = speedInput.value;
-                };
-                
-                audioPlayer.play();
+                // Tải xong -> Phát luôn
+                log.innerText = "✅ Tải xong! Đang phát.";
+                playAudio(data.blobUrl, data.nextLink);
 
-                // Xử lý nút Next & Lưu link vào ô ẨN (Hidden)
-                if (nextLink) {
-                    nextUrlInput.value = nextLink;          // Lưu link vào chỗ kín
-                    // KHÔNG cập nhật urlInput ở đây nữa (để nó giữ nguyên link hiện tại)
-                    btnNext.style.display = 'inline-block';
-                } else {
-                    nextUrlInput.value = "";
+                // Âm thầm đi tải chương sau
+                if (data.nextLink) {
+                    prefetchNext(data.nextLink);
                 }
 
                 btnStart.disabled = false;
@@ -143,24 +136,75 @@
             }
         }
 
-        function goToNext() {
-            const nextLink = nextUrlInput.value; // Lấy link từ ô ẩn
-            if(nextLink) {
-                startReading(nextLink); // Gọi hàm đọc với link mới
-                // Hàm startReading ở trên sẽ tự động cập nhật urlInput = nextLink ngay dòng đầu tiên
+        // 3. Hàm gọi API (Fetch)
+        async function fetchChapter(url) {
+            // Nếu bạn có ô nhập cookie, hãy thêm &cookie=... vào url fetch bên dưới
+            const response = await fetch(`/api/speak?url=${encodeURIComponent(url)}`);
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || "Lỗi kết nối Server");
+            }
+            const nextLinkHeader = response.headers.get('X-Next-Url');
+            const nextLink = nextLinkHeader ? decodeURI(nextLinkHeader) : null;
+            const blob = await response.blob();
+            const blobUrl = URL.createObjectURL(blob);
+
+            return { url, blobUrl, nextLink };
+        }
+
+        // 4. Hàm tải ngầm (Prefetch) - Chạy ẩn
+        async function prefetchNext(nextUrl) {
+            console.log("🔄 Bắt đầu tải ngầm chương sau:", nextUrl);
+            try {
+                const data = await fetchChapter(nextUrl);
+                // Lưu vào kho
+                preloadedData = {
+                    url: data.url,          
+                    blobUrl: data.blobUrl,  
+                    nextLink: data.nextLink 
+                };
+                console.log("✅ Tải ngầm hoàn tất! Sẵn sàng.");
+            } catch (e) {
+                console.warn("⚠️ Tải ngầm thất bại:", e);
             }
         }
 
-        // Tự động qua bài
+        // 5. Hàm xử lý phát nhạc & UI
+        function playAudio(blobUrl, nextLink) {
+            audioPlayer.src = blobUrl;
+            
+            // Đảm bảo giữ đúng tốc độ khi bài mới bắt đầu
+            audioPlayer.onplay = () => {
+                audioPlayer.playbackRate = speedInput.value;
+            };
+            
+            audioPlayer.play();
+
+            // Setup nút Next
+            if (nextLink) {
+                nextUrlInput.value = nextLink; 
+                btnNext.style.display = 'inline-block';
+            } else {
+                nextUrlInput.value = "";
+            }
+        }
+
+        function goToNext() {
+            const nextLink = nextUrlInput.value;
+            if(nextLink) {
+                startReading(nextLink); 
+            }
+        }
+
+        // 6. Sự kiện khi đọc xong (Auto Next)
         audioPlayer.onended = () => {
             const isAuto = document.getElementById('autoNext').checked;
             const nextLink = nextUrlInput.value;
 
             if (isAuto && nextLink) {
-                log.innerText = "🔄 Đang tự động chuyển chương trong 3 giây...";
-                setTimeout(() => {
-                    goToNext(); // Gọi hàm goToNext thay vì startReading trực tiếp cho gọn
-                }, 3000); 
+                log.innerText = "⏭ Đang chuyển chương...";
+                // Chuyển luôn không cần đợi 3s nữa
+                goToNext(); 
             }
         };
     </script>
