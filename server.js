@@ -22,13 +22,35 @@ app.get('/api/speak', async (req, res) => {
     try {
         // 1. Tải HTML về bằng AXIOS (Giả lập Headers y như trình duyệt)
         const response = await axios.get(url, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
-                'Referer': url // Một số web check referer
-            },
-            timeout: 10000 // Timeout 10s cho request
-        });
+    headers: {
+        // 1. User-Agent xịn (Chrome mới nhất)
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        
+        // 2. Giả vờ chấp nhận mọi loại nội dung
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        
+        // 3. Quan trọng: Referer (Nói dối là tôi đến từ Google hoặc trang chủ của họ)
+        // Cách tốt nhất: Lấy domain gốc của web truyện làm referer
+        'Referer': new URL(url).origin + '/', 
+        
+        // 4. Các headers phụ trợ để giống người dùng thật
+        'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding': 'gzip, deflate, br', // Axios tự giải nén, nhưng cần khai báo để web không nghi ngờ
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Cache-Control': 'max-age=0',
+        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'same-origin',
+        'Sec-Fetch-User': '?1'
+    },
+    // Quan trọng: Tự động giải nén response (gzip/brotli)
+    decompress: true, 
+    timeout: 100000
+});
 
         // 2. Load HTML vào Cheerio để xử lý
         const $ = cheerio.load(response.data);
