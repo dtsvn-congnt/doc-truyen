@@ -3,7 +3,7 @@ process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0'; // Chấp nhận lỗi SSL n�
 const express = require('express');
 const googleTTS = require('google-tts-api');
 const path = require('path');
-const axios = require('axios'); // Thay thế cho trình duyệt
+const { gotScraping } = require('got-scraping');
 const cheerio = require('cheerio'); // Thay thế cho việc quét DOM
 
 const app = express();
@@ -23,26 +23,25 @@ app.get('/api/speak', async (req, res) => {
     console.log("Processing URL:", url);
 
     try {
-        // Cấu hình Headers mặc định
-        const headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
-            'Referer': new URL(url).origin + '/',
-        };
-
-        // 2. Nếu người dùng có nhập cookie, gắn nó vào headers
-        if (userCookie) {
-            console.log("Đang sử dụng Cookie tùy chỉnh...");
-            headers['Cookie'] = userCookie;
-        }
-
-        const response = await axios.get(url, {
-            headers: headers, // Sử dụng bộ headers đã cấu hình
-            timeout: 100000
+       // --- PHẦN QUAN TRỌNG NHẤT: gotScraping ---
+        // Thư viện này tự động giả lập vân tay TLS của Chrome xịn
+        const response = await gotScraping({
+            url: url,
+            headerGeneratorOptions: {
+                browsers: [{ name: 'chrome', minVersion: 110 }],
+                devices: ['desktop'],
+                locales: ['vi-VN'],
+                operatingSystems: ['windows'],
+            },
+            headers: {
+                // Nếu người dùng nhập cookie thì gắn vào
+                ...(userCookie ? { 'cookie': userCookie } : {})
+            },
+            // Tự động xử lý redirect, tự giải nén gzip
         });
+        // -------------------------------------------
 
-        // 2. Load HTML vào Cheerio để xử lý
-        const $ = cheerio.load(response.data);
+        const $ = cheerio.load(response.body);
 
         // 3. Lấy nội dung truyện
         const chapterContentDiv = $('#chapter_content');
