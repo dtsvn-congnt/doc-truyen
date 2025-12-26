@@ -52,7 +52,7 @@ app.get('/api/speak', async (req, res) => {
         });
 
     console.log(req.query.url);
-    await page.goto(req.query.url, { waitUntil: 'networkidle2' });
+    await page.goto(req.query.url, { waitUntil: 'networkidle2', timeout: 600000000000 });
     
 // 3. Lấy nội dung (Lấy tất cả thẻ <p> và ghép lại)
     const result = await page.evaluate(() => {
