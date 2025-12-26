@@ -15,42 +15,31 @@ app.get('/', (req, res) => {
 
 app.get('/api/speak', async (req, res) => {
     const url = req.query.url;
+    // 1. Lấy cookie từ client gửi lên
+    const userCookie = req.query.cookie || ''; 
+
     if (!url) return res.status(400).send('Thiếu URL');
 
     console.log("Processing URL:", url);
 
     try {
-        // 1. Tải HTML về bằng AXIOS (Giả lập Headers y như trình duyệt)
+        // Cấu hình Headers mặc định
+        const headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Referer': new URL(url).origin + '/',
+        };
+
+        // 2. Nếu người dùng có nhập cookie, gắn nó vào headers
+        if (userCookie) {
+            console.log("Đang sử dụng Cookie tùy chỉnh...");
+            headers['Cookie'] = userCookie;
+        }
+
         const response = await axios.get(url, {
-    headers: {
-        // 1. User-Agent xịn (Chrome mới nhất)
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        
-        // 2. Giả vờ chấp nhận mọi loại nội dung
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        
-        // 3. Quan trọng: Referer (Nói dối là tôi đến từ Google hoặc trang chủ của họ)
-        // Cách tốt nhất: Lấy domain gốc của web truyện làm referer
-        'Referer': new URL(url).origin + '/', 
-        
-        // 4. Các headers phụ trợ để giống người dùng thật
-        'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Accept-Encoding': 'gzip, deflate, br', // Axios tự giải nén, nhưng cần khai báo để web không nghi ngờ
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Cache-Control': 'max-age=0',
-        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'same-origin',
-        'Sec-Fetch-User': '?1'
-    },
-    // Quan trọng: Tự động giải nén response (gzip/brotli)
-    decompress: true, 
-    timeout: 100000
-});
+            headers: headers, // Sử dụng bộ headers đã cấu hình
+            timeout: 100000
+        });
 
         // 2. Load HTML vào Cheerio để xử lý
         const $ = cheerio.load(response.data);
