@@ -1,4 +1,4 @@
-process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0'; // Chấp nhận lỗi SSL nếu có (lưu ý bảo mật)
+//process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0'; // Chấp nhận lỗi SSL nếu có (lưu ý bảo mật)
 
 const express = require('express');
 const googleTTS = require('google-tts-api');
