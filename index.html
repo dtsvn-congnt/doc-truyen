@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto Novel Reader (Fix URL)</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; padding-top: 30px; background: #f4f4f4; }
+        .container { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 90%; max-width: 600px; text-align: center; }
+        
+        /* Ô nhập link */
+        input[type="text"] { width: 80%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: 1px solid #ddd; font-size: 14px; color: #333; }
+        
+        /* Nút bấm */
+        button { padding: 10px 20px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 6px; font-size: 16px; margin: 5px; transition: 0.2s; }
+        button:hover { opacity: 0.9; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .btn-next { background: #28a745; display: none; } 
+
+        /* Thanh chỉnh tốc độ */
+        .speed-control { margin: 20px 0; padding: 10px; background: #f9f9f9; border-radius: 8px; border: 1px dashed #ccc; }
+        .speed-control label { font-weight: bold; margin-right: 10px; }
+        input[type="range"] { vertical-align: middle; cursor: pointer; width: 150px; }
+
+        /* Audio Player */
+        audio { width: 100%; margin-top: 10px; outline: none; }
+        
+        #log { margin-top: 15px; font-size: 14px; color: #555; min-height: 20px; font-style: italic; }
+        
+        .options { margin-top: 15px; text-align: left; display: inline-block; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>📖 Đọc Truyện Tự Động</h2>
+        
+        <input type="text" id="urlInput" placeholder="Dán link chapter truyện vào đây...">
+        <br>
+        
+        <button onclick="startReading()" id="btnStart">▶ Bắt đầu đọc</button>
+        <button onclick="goToNext()" id="btnNext" class="btn-next">⏭ Qua chương sau</button>
+
+        <div class="speed-control">
+            <label>Tốc độ đọc: <span id="speedLabel" style="color: #d9534f;">1.0x</span></label>
+            <input type="range" id="speedInput" min="0.5" max="2.0" step="0.25" value="1.0">
+        </div>
+
+        <div id="log">Sẵn sàng...</div>
+        <audio id="audioPlayer" controls></audio>
+        
+        <input type="hidden" id="nextUrlHidden">
+        
+        <div class="options">
+            <input type="checkbox" id="autoNext" checked> 
+            <label for="autoNext">Tự động chuyển chương khi đọc xong</label>
+        </div>
+    </div>
+
+    <script>
+        const log = document.getElementById('log');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const nextUrlInput = document.getElementById('nextUrlHidden');
+        const btnNext = document.getElementById('btnNext');
+        const btnStart = document.getElementById('btnStart');
+        const urlInput = document.getElementById('urlInput');
+        const speedInput = document.getElementById('speedInput');
+        const speedLabel = document.getElementById('speedLabel');
+
+        // Xử lý thanh trượt tốc độ
+        speedInput.oninput = function() {
+            const val = this.value;
+            speedLabel.innerText = val + 'x';
+            audioPlayer.playbackRate = val; 
+        };
+
+        // Hàm chính
+        async function startReading(urlOverride = null) {
+            // Nếu có urlOverride (tức là chuyển bài), dùng nó. Nếu không thì dùng cái trong textbox.
+            const currentUrl = urlOverride || urlInput.value;
+            
+            if (!currentUrl) {
+                alert("Vui lòng dán link truyện!");
+                return;
+            }
+
+            // CẬP NHẬT UI NGAY LẬP TỨC: TextBox phải hiện URL đang xử lý
+            urlInput.value = currentUrl; 
+
+            log.innerText = "⏳ Đang cào dữ liệu & tạo giọng nói...";
+            btnStart.disabled = true;
+            btnNext.style.display = 'none';
+            
+            // Dừng nhạc cũ
+            audioPlayer.pause();
+            audioPlayer.src = "";
+
+            try {
+                // Gọi API
+                const response = await fetch(`/api/speak?url=${encodeURIComponent(currentUrl)}`);
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || "Lỗi kết nối Server");
+                }
+
+                // Lấy header X-Next-Url (Link chương sau)
+                const nextLinkHeader = response.headers.get('X-Next-Url');
+                const nextLink = nextLinkHeader ? decodeURI(nextLinkHeader) : null;
+
+                // Lấy Audio Blob
+                const audioBlob = await response.blob();
+                const audioUrl = URL.createObjectURL(audioBlob);
+
+                // Cập nhật trạng thái
+                log.innerText = nextLink ? "✅ Đã tải xong! Có chương tiếp theo." : "✅ Đã tải xong! (Hết truyện)";
+                
+                // Phát nhạc
+                audioPlayer.src = audioUrl;
+                
+                // Giữ tốc độ khi phát bài mới
+                audioPlayer.onplay = () => {
+                    audioPlayer.playbackRate = speedInput.value;
+                };
+                
+                audioPlayer.play();
+
+                // Xử lý nút Next & Lưu link vào ô ẨN (Hidden)
+                if (nextLink) {
+                    nextUrlInput.value = nextLink;          // Lưu link vào chỗ kín
+                    // KHÔNG cập nhật urlInput ở đây nữa (để nó giữ nguyên link hiện tại)
+                    btnNext.style.display = 'inline-block';
+                } else {
+                    nextUrlInput.value = "";
+                }
+
+                btnStart.disabled = false;
+
+            } catch (err) {
+                console.error(err);
+                log.innerText = "❌ Lỗi: " + err.message;
+                btnStart.disabled = false;
+            }
+        }
+
+        function goToNext() {
+            const nextLink = nextUrlInput.value; // Lấy link từ ô ẩn
+            if(nextLink) {
+                startReading(nextLink); // Gọi hàm đọc với link mới
+                // Hàm startReading ở trên sẽ tự động cập nhật urlInput = nextLink ngay dòng đầu tiên
+            }
+        }
+
+        // Tự động qua bài
+        audioPlayer.onended = () => {
+            const isAuto = document.getElementById('autoNext').checked;
+            const nextLink = nextUrlInput.value;
+
+            if (isAuto && nextLink) {
+                log.innerText = "🔄 Đang tự động chuyển chương trong 3 giây...";
+                setTimeout(() => {
+                    goToNext(); // Gọi hàm goToNext thay vì startReading trực tiếp cho gọn
+                }, 3000); 
+            }
+        };
+    </script>
+</body>
+</html>
