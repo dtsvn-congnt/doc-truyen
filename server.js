@@ -70,26 +70,13 @@ app.get('/api/speak', async (req, res) => {
     // 2. Lấy LINK NEXT CHAPTER (Theo yêu cầu của bạn)
             // Tìm thẻ <a> có class là "next-chapter"
     
-
+    console.log(JSON.stringify(result));
     if (result.nextLink) {
             // encodeURI để tránh lỗi nếu link có ký tự lạ
             res.set('X-Next-Url', encodeURI(result.nextLink));
     }
 
 
-
-    // // Nhấn nút đăng nhập
-    // await page.click('#submit');  // Sửa lại selector nếu cần để đúng với nút đăng nhập
-    
-    // // Nhấn nút đăng nhập
-    // await page.click('#submit');
-    // await page.waitForNavigation({ waitUntil: 'networkidle2' });
-
-    // // Lấy cookie và CSRF token
-    // const cookies = await page.cookies();
-    // const csrfToken = await page.evaluate(() => {
-    //     return window.csrfHash || null;  // Lấy csrfHash từ trang
-    // });
 
     // Đóng trình duyệt
     await browser.close();
