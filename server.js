@@ -35,6 +35,7 @@ app.get('/api/speak', async (req, res) => {
     //     console.error(err);
     //     res.status(500).send('Lỗi server');
     // }
+    try {
     const browser = await puppeteer.launch({
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
@@ -94,6 +95,10 @@ app.get('/api/speak', async (req, res) => {
     await browser.close();
 
     handleTTS(result.content, res);
+     } catch (err) {
+        console.error(err);
+        res.status(500).send('Lỗi server');
+    }
 });
 
 async function handleTTS(text, res) {
