@@ -3,7 +3,6 @@ process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0'; // Chấp nhận lỗi SSL n�
 const express = require('express');
 const googleTTS = require('google-tts-api');
 const path = require('path');
-const { gotScraping } = require('got-scraping');
 const cheerio = require('cheerio'); // Thay thế cho việc quét DOM
 
 const app = express();
@@ -25,6 +24,7 @@ app.get('/api/speak', async (req, res) => {
     try {
        // --- PHẦN QUAN TRỌNG NHẤT: gotScraping ---
         // Thư viện này tự động giả lập vân tay TLS của Chrome xịn
+		const { gotScraping } = await import('got-scraping');
         const response = await gotScraping({
             url: url,
             headerGeneratorOptions: {
