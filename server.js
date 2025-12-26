@@ -100,7 +100,7 @@ async function handleTTS(text, res) {
 			lang: 'vi',
 			slow: false,
 			// 1. Dùng domain global hoặc domain API này thường ít bị chặn hơn
-			host: 'https://translate.googleapis.com', 
+			host: 'https://translate.google.com',
 			// 2. Tăng timeout lên 20 giây (Render free tier mạng khởi động hơi chậm)
 			timeout: 30000,
 			splitPunct: ',.?!',
