@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Máy Đọc Truyện (V11 Auto Loop)</title>
+    <title>Máy Đọc Truyện (V12 Android Fix)</title>
     <style>
         /* --- 1. CẤU HÌNH MÀU SẮC --- */
         :root {
@@ -21,7 +21,6 @@
             --progress-bg: #f8f9fa;
         }
 
-        /* DARK MODE */
         [data-theme="dark"] {
             --bg-body: #121212;
             --bg-container: #1e1e1e;
@@ -45,6 +44,7 @@
             background: var(--bg-body); 
             color: var(--text-main);
             transition: background 0.3s, color 0.3s;
+            padding-bottom: 50px; /* Tránh bị che mất bởi thanh điều hướng điện thoại */
         }
         
         .container { 
@@ -63,9 +63,8 @@
             box-sizing: border-box; 
         }
 
-        /* Nút bấm */
         .control-group { margin: 10px 0; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
-        button { padding: 10px 18px; cursor: pointer; color: white; border: none; border-radius: 6px; font-size: 15px; font-weight: 600; transition: 0.2s; }
+        button { padding: 12px 20px; cursor: pointer; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: 600; transition: 0.2s; touch-action: manipulation; }
         button:hover { opacity: 0.9; transform: translateY(-1px); }
         button:disabled { background: #555 !important; cursor: not-allowed; opacity: 0.5; }
         
@@ -80,16 +79,14 @@
             margin-bottom: 10px; border-radius: 20px;
         }
 
-        /* Thanh tiến độ */
         .progress-wrapper { 
             background: var(--progress-bg); 
             padding: 12px; border-radius: 8px; margin: 15px 0; 
             border: 1px solid var(--border-color); 
         }
-        input[type="range"] { width: 100%; cursor: pointer; margin: 10px 0; }
+        input[type="range"] { width: 100%; cursor: pointer; margin: 10px 0; height: 20px; } /* Tăng height cho dễ bấm trên điện thoại */
         .info-label { display:flex; justify-content:space-between; font-size:14px; font-weight:bold; color: var(--text-sub); }
 
-        /* KHUNG ĐỌC */
         #readingBox { 
             margin-top: 15px; padding: 15px; 
             background: var(--box-bg); 
@@ -98,18 +95,14 @@
             transition: background 0.3s;
         }
 
-        .ctx-prev { 
-            color: var(--ctx-prev-color); font-size: 16px; margin-bottom: 10px; padding-left: 10px; border-left: 3px solid var(--border-color); 
-        }
+        .ctx-prev { color: var(--ctx-prev-color); font-size: 16px; margin-bottom: 10px; padding-left: 10px; border-left: 3px solid var(--border-color); }
         .ctx-current { 
             color: var(--hl-text); font-size: 20px; font-weight: 600; line-height: 1.6;
             background: var(--hl-bg); padding: 15px; border-radius: 8px; 
             border-left: 5px solid var(--hl-border); margin: 15px 0;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
-        .ctx-next { 
-            color: var(--ctx-next-color); font-size: 17px; margin-top: 10px; padding-left: 10px; border-left: 3px solid var(--border-color); 
-        }
+        .ctx-next { color: var(--ctx-next-color); font-size: 17px; margin-top: 10px; padding-left: 10px; border-left: 3px solid var(--border-color); }
 
         #statusLog { font-size: 13px; color: var(--text-sub); margin-top: 10px; font-style: italic; min-height: 20px; }
     </style>
@@ -118,7 +111,7 @@
 
     <div class="container">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-            <h3 style="margin: 0; color: var(--text-main);">📖 Máy Đọc Truyện</h3>
+            <h3 style="margin: 0; color: var(--text-main);">📖 Máy Đọc (Android Fix)</h3>
             <button onclick="toggleTheme()" class="btn-theme" id="themeBtn">🌙 Chế độ tối</button>
         </div>
         
@@ -174,7 +167,18 @@
             sentences: [], index: 0, isReading: false, dataLoaded: false
         };
 
-        // --- 2. HÀM CHẾ ĐỘ TỐI ---
+        // --- 2. HÀM UNLOCK AUDIO CHO ANDROID (QUAN TRỌNG) ---
+        function unlockAudio() {
+            // Phát một âm thanh rỗng ngay lập tức để chiếm quyền Audio
+            if (window.synth.speaking) return; // Nếu đang nói thì thôi
+            const u = new SpeechSynthesisUtterance(" "); // Ký tự khoảng trắng
+            u.volume = 0; // Tắt tiếng
+            u.duration = 0;
+            window.synth.speak(u);
+            console.log("🔓 Audio Unlocked for Android");
+        }
+
+        // --- 3. CÁC HÀM CƠ BẢN ---
         function toggleTheme() {
             const body = document.body;
             if (body.getAttribute('data-theme') === 'dark') {
@@ -186,118 +190,79 @@
             }
         }
 
-        // --- 3. WAKE LOCK ---
         async function requestWakeLock() {
             try {
                 if ('wakeLock' in navigator) {
                     wakeLock = await navigator.wakeLock.request('screen');
-                    console.log('✅ Wake Lock active');
                 }
             } catch (err) { console.error('Wake Lock Error', err); }
         }
 
-        // --- 4. HÀM ĐỌC CỐT LÕI (FIXED) ---
+        // --- 4. HÀM LẤY GIỌNG (FIXED FOR ANDROID) ---
+        function getVoice() {
+            const voices = window.synth.getVoices();
+            // Android thường tải giọng chậm, cần kiểm tra kỹ
+            if (voices.length === 0) return null;
+
+            // Ưu tiên giọng Google Tiếng Việt trên Android
+            return voices.find(v => v.lang.includes('vi')) || voices[0];
+        }
+        
+        // Buộc Android tải giọng
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = () => {
+                console.log("Voices loaded:", window.synth.getVoices().length);
+            };
+        }
+
+        // --- 5. HÀM ĐỌC ---
         function speakCurrentSentence() {
             if (!state.isReading) return;
-            
-            // Nếu hết bài
             if (state.index >= state.sentences.length) {
                 onFinishChapter();
                 return;
             }
 
-            // Cập nhật giao diện
             updateReadingBoxUI();
             updateProgressBar();
 
             const text = state.sentences[state.index];
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.voice = getVoice();
+            
+            // Lấy giọng mỗi lần đọc để đảm bảo nếu Android load chậm thì vẫn nhận được
+            const selectedVoice = getVoice();
+            if (selectedVoice) utterance.voice = selectedVoice;
+
             utterance.rate = parseFloat(speedInput.value);
-            utterance.lang = 'vi-VN';
+            utterance.lang = 'vi-VN'; // Cố định locale
 
-            // --- SỰ KIỆN QUAN TRỌNG: ĐỌC XONG CÂU ---
             utterance.onend = () => {
-                // Chỉ cần đang ở chế độ đọc thì TỰ ĐỘNG next câu tiếp theo
-                // Không quan tâm là do tự đọc hay do bấm nút Tiến/Lùi
-                if (state.isReading) {
-                    state.index++;
-                    speakCurrentSentence(); // Đệ quy
-                }
-            };
-
-            utterance.onerror = (e) => {
-                if (e.error === 'interrupted') return;
-                // Nếu lỗi cứ nhảy tiếp
                 if (state.isReading) {
                     state.index++;
                     speakCurrentSentence();
                 }
             };
 
-            // Lưu biến toàn cục và phát
+            utterance.onerror = (e) => {
+                if (e.error === 'interrupted') return;
+                if (state.isReading) {
+                    state.index++;
+                    speakCurrentSentence();
+                }
+            };
+
             window.uttr = utterance;
             window.synth.speak(utterance);
         }
 
-        // --- 5. HÀM TUA (ĐÃ SỬA LỖI DỪNG) ---
-        function manualSeek(step) {
-            if (!state.dataLoaded) return;
-
-            // 1. Ngắt sự kiện của câu cũ để tránh xung đột
-            if (window.uttr) window.uttr.onend = null;
-            window.synth.cancel();
-
-            // 2. Cập nhật vị trí mới
-            state.index += step;
-            if (state.index < 0) state.index = 0;
-            if (state.index >= state.sentences.length) state.index = state.sentences.length - 1;
-
-            // 3. Bắt buộc bật chế độ đọc và chạy tiếp
-            state.isReading = true; 
-            speakCurrentSentence(); 
-        }
-
-        function seekToBar() {
-            if (!state.dataLoaded) return;
-
-            if (window.uttr) window.uttr.onend = null;
-            window.synth.cancel();
-
-            state.index = parseInt(progressBar.value);
-            state.isReading = true;
-            speakCurrentSentence();
-        }
-
-        // --- 6. CÁC HÀM PHỤ TRỢ ---
-        function updateReadingBoxUI() {
-            if (state.sentences.length === 0) return;
-            let html = '';
-            
-            if (state.index > 0) html += `<div class="ctx-prev">${state.sentences[state.index - 1]}</div>`;
-            html += `<div class="ctx-current">${state.sentences[state.index]}</div>`;
-            if (state.index + 1 < state.sentences.length) html += `<div class="ctx-next">${state.sentences[state.index + 1]}</div>`;
-            if (state.index + 2 < state.sentences.length) html += `<div class="ctx-next">${state.sentences[state.index + 2]}</div>`;
-            
-            readingBox.innerHTML = html;
-            const currentEl = document.querySelector('.ctx-current');
-            if(currentEl) currentEl.scrollIntoView({behavior: "smooth", block: "center"});
-        }
-
-        function splitTextSmart(text) {
-            if (!text) return [];
-            let clean = text.replace(/\.\.+/g, '.');
-            clean = clean.replace(/([.?!;\n]+[”"']*)/g, "$1|");
-            return clean.split("|").map(s => s.trim()).filter(s => {
-                const hasLetters = /[a-zA-Z0-9\u00C0-\u1EF9]/.test(s);
-                return s.length > 0 && hasLetters;
-            });
-        }
-
+        // --- 6. XỬ LÝ NÚT PLAY (CÓ UNLOCK) ---
         async function handlePlayButton() {
+            // BƯỚC 1: UNLOCK NGAY LẬP TỨC (QUAN TRỌNG NHẤT)
+            unlockAudio();
+            requestWakeLock();
+
             const url = urlInput.value;
             if (!url) { alert("Thiếu Link!"); return; }
-            requestWakeLock();
 
             if (state.dataLoaded && !state.isReading) {
                 state.isReading = true;
@@ -308,19 +273,21 @@
             if (!state.dataLoaded) await fetchAndStart(url);
         }
 
-        function handleStopButton() {
-            state.isReading = false;
-            // Ngắt sự kiện để đảm bảo không nhảy lung tung
-            if (window.uttr) window.uttr.onend = null;
-            window.synth.cancel();
-            
-            updateStatus("⏹ Đã dừng.");
-            if (wakeLock !== null) { wakeLock.release().then(() => { wakeLock = null; }); }
+        // --- 7. TÁCH CÂU ---
+        function splitTextSmart(text) {
+            if (!text) return [];
+            let clean = text.replace(/\.\.+/g, '.');
+            clean = clean.replace(/([.?!;\n]+[”"']*)/g, "$1|");
+            return clean.split("|").map(s => s.trim()).filter(s => {
+                const hasLetters = /[a-zA-Z0-9\u00C0-\u1EF9]/.test(s);
+                return s.length > 0 && hasLetters;
+            });
         }
 
+        // --- 8. FETCH ---
         async function fetchAndStart(url) {
             handleStopButton();
-            btnStart.disabled = true;
+            // Không disable nút start để tránh mất gesture
             updateStatus("⏳ Đang tải dữ liệu...");
 
             try {
@@ -347,15 +314,60 @@
                     btnNext.style.display = 'none';
                 }
 
-                btnStart.disabled = false;
-                requestWakeLock(); 
+                // Chạy lại Unlock lần nữa cho chắc
+                unlockAudio();
                 speakCurrentSentence();
 
             } catch (err) {
                 readingBox.innerText = "❌ Lỗi: " + err.message;
                 updateStatus("Lỗi tải trang.");
-                btnStart.disabled = false;
             }
+        }
+
+        // --- 9. CÁC HÀM KHÁC ---
+        function handleStopButton() {
+            state.isReading = false;
+            if (window.uttr) window.uttr.onend = null;
+            window.synth.cancel();
+            updateStatus("⏹ Đã dừng.");
+            if (wakeLock !== null) { wakeLock.release().then(() => { wakeLock = null; }); }
+        }
+
+        function manualSeek(step) {
+            if (!state.dataLoaded) return;
+            unlockAudio(); // Unlock khi bấm tua
+            if (window.uttr) window.uttr.onend = null;
+            window.synth.cancel();
+
+            state.index += step;
+            if (state.index < 0) state.index = 0;
+            if (state.index >= state.sentences.length) state.index = state.sentences.length - 1;
+
+            state.isReading = true; 
+            speakCurrentSentence(); 
+        }
+
+        function seekToBar() {
+            if (!state.dataLoaded) return;
+            unlockAudio();
+            if (window.uttr) window.uttr.onend = null;
+            window.synth.cancel();
+
+            state.index = parseInt(progressBar.value);
+            state.isReading = true;
+            speakCurrentSentence();
+        }
+
+        function updateReadingBoxUI() {
+            if (state.sentences.length === 0) return;
+            let html = '';
+            if (state.index > 0) html += `<div class="ctx-prev">${state.sentences[state.index - 1]}</div>`;
+            html += `<div class="ctx-current">${state.sentences[state.index]}</div>`;
+            if (state.index + 1 < state.sentences.length) html += `<div class="ctx-next">${state.sentences[state.index + 1]}</div>`;
+            if (state.index + 2 < state.sentences.length) html += `<div class="ctx-next">${state.sentences[state.index + 2]}</div>`;
+            readingBox.innerHTML = html;
+            const currentEl = document.querySelector('.ctx-current');
+            if(currentEl) currentEl.scrollIntoView({behavior: "smooth", block: "center"});
         }
 
         function updateProgressBar() {
@@ -364,14 +376,8 @@
         }
         function updateStatus(msg) { statusLog.innerText = msg; }
         
-        function getVoice() {
-            const voices = window.synth.getVoices();
-            return voices.find(v => v.lang.includes('vi')) || voices[0];
-        }
-        if (speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = getVoice;
-        
         speedInput.oninput = function() { document.getElementById('speedLabel').innerText = this.value + 'x'; };
-
+        
         window.addEventListener('load', () => window.synth.cancel());
         window.addEventListener('beforeunload', () => window.synth.cancel());
         document.addEventListener('visibilitychange', async () => {
