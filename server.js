@@ -1,7 +1,7 @@
 //process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0'; // Chấp nhận lỗi SSL nếu có (lưu ý bảo mật)
 
 const express = require('express');
-const googleTTS = require('google-tts-api');
+//const googleTTS = require('google-tts-api');
 const path = require('path');
 const cheerio = require('cheerio'); // Thay thế cho việc quét DOM
 
@@ -44,19 +44,45 @@ app.get('/api/speak', async (req, res) => {
         const $ = cheerio.load(response.body);
 
         // 3. Lấy nội dung truyện
-        const chapterContentDiv = $('#chapter_content');
+        const chapterDiv = $('#chapter_content');
         let content = "";
 
-        if (chapterContentDiv.length > 0) {
-            // Mẹo nhỏ: Cheerio lấy .text() sẽ dính liền các dòng. 
-            // Ta thay thế thẻ <br> thành xuống dòng trước khi lấy text để giống logic cũ.
-            chapterContentDiv.find('br').replaceWith('\n');
-            chapterContentDiv.find('p').append('\n'); // Thêm xuống dòng sau mỗi thẻ p
-            
-            content = chapterContentDiv.text();
+        if (chapterDiv.length) {
+            // 1. XỬ LÝ THẺ BR THÔNG MINH
+            // Duyệt qua từng thẻ <br>
+            chapterDiv.find('br').each((i, el) => {
+                // Lấy phần tử đứng ngay trước thẻ <br>
+                const prevNode = el.previousSibling;
+                
+                // Kiểm tra: Nếu phần tử trước là Text và kết thúc bằng dấu câu (. ? ! " ”)
+                if (prevNode && prevNode.type === 'text') {
+                    const text = prevNode.data.trim();
+                    // Regex check đuôi: Kết thúc bằng . ! ? hoặc " ”
+                    if (/[.?!"”']$/.test(text)) {
+                        $(el).replaceWith(' '); // Đã có dấu câu -> Chỉ thêm khoảng trắng
+                        return; // Xong, sang thẻ khác
+                    }
+                }
+                // Nếu chưa có dấu câu -> Thêm dấu chấm và khoảng trắng
+                $(el).replaceWith('. ');
+            });
 
-            // Logic cũ của bạn: Xử lý xuống dòng thành dấu chấm để Google đọc ngắt nghỉ
-            content = content.replace(/\n/g, '. ').replace(/\s+/g, ' ');
+            // Xử lý thẻ P (thường là hết đoạn cũng cần chấm)
+            chapterDiv.find('p').each((i, el) => {
+                $(el).append('. ');
+            });
+
+            // 2. LẤY TEXT VÀ DỌN DẸP SƠ BỘ
+            content = chapterDiv.text();
+            
+            // Xóa dấu chấm thừa (.. -> .)
+            content = content.replace(/\.(\s*\.)+/g, '.');
+            // Xóa dấu chấm vô duyên sau dấu ngoặc kép (Example: ”. -> ”)
+            content = content.replace(/([”"'])\./g, '$1'); 
+            // Xóa khoảng trắng thừa
+            content = content.replace(/\s+/g, ' ').trim();
+        } else {
+             return res.status(403).json({ error: "Không lấy được nội dung (Có thể bị chặn hoặc sai Selector)" });
         }
 
         // 4. Lấy Link Next Chapter
@@ -77,7 +103,11 @@ app.get('/api/speak', async (req, res) => {
         }
 
         // 6. Xử lý TTS
-        await handleTTS(content, res);
+       // await handleTTS(content, res);
+	   res.json({
+            content: content,
+            nextLink: nextLink
+        });
 
     } catch (err) {
         console.error("Lỗi cào dữ liệu:", err.message);
@@ -89,37 +119,37 @@ app.get('/api/speak', async (req, res) => {
     }
 });
 
-async function handleTTS(text, res) {
-    if (!text || text.trim().length === 0) return res.status(400).send('Không tìm thấy nội dung truyện');
+// async function handleTTS(text, res) {
+    // if (!text || text.trim().length === 0) return res.status(400).send('Không tìm thấy nội dung truyện');
 
-    try {
-        // Cắt bớt nếu text quá dài để tránh lỗi Google TTS (Giới hạn khoảng 200 ký tự mỗi request của lib này)
-        // Nhưng google-tts-api tự xử lý split, chỉ cần đảm bảo server không timeout
+    // try {
+      /*   Cắt bớt nếu text quá dài để tránh lỗi Google TTS (Giới hạn khoảng 200 ký tự mỗi request của lib này)
+        Nhưng google-tts-api tự xử lý split, chỉ cần đảm bảo server không timeout
+         */
+        // const results = await googleTTS.getAllAudioBase64(text, {
+			// lang: 'vi',
+			// slow: false,
+			/* 1. Dùng domain global hoặc domain API này thường ít bị chặn hơn */
+			// host: 'https://translate.google.com',
+			/* 2. Tăng timeout lên 20 giây (Render free tier mạng khởi động hơi chậm) */
+			// timeout: 30000,
+			// splitPunct: ',.?!',
+		// });
         
-        const results = await googleTTS.getAllAudioBase64(text, {
-			lang: 'vi',
-			slow: false,
-			// 1. Dùng domain global hoặc domain API này thường ít bị chặn hơn
-			host: 'https://translate.google.com',
-			// 2. Tăng timeout lên 20 giây (Render free tier mạng khởi động hơi chậm)
-			timeout: 30000,
-			splitPunct: ',.?!',
-		});
-        
-        const combinedBase64 = results.map(item => item.base64).join('');
-        const audioBuffer = Buffer.from(combinedBase64, 'base64');
+        // const combinedBase64 = results.map(item => item.base64).join('');
+        // const audioBuffer = Buffer.from(combinedBase64, 'base64');
 
-        res.set({ 
-            'Content-Type': 'audio/mp3', 
-            'Content-Length': audioBuffer.length,
-            'Access-Control-Expose-Headers': 'X-Next-Url' 
-        });
-        res.send(audioBuffer);
-    } catch (err) {
-        console.error("Lỗi TTS:", err);
-        res.status(500).send('Lỗi khi chuyển giọng nói');
-    }
-}
+        // res.set({ 
+            // 'Content-Type': 'audio/mp3', 
+            // 'Content-Length': audioBuffer.length,
+            // 'Access-Control-Expose-Headers': 'X-Next-Url' 
+        // });
+        // res.send(audioBuffer);
+    // } catch (err) {
+        // console.error("Lỗi TTS:", err);
+        // res.status(500).send('Lỗi khi chuyển giọng nói');
+    // }
+// }
 
 app.listen(PORT, () => {
     console.log('Server running at http://localhost:' + PORT);
