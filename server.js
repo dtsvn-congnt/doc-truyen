@@ -53,15 +53,16 @@ app.get('/api/speak', async (req, res) => {
         // Logic lấy nội dung
         const chapterDiv = $('#chapter_content'); 
         let content = "";
-        let nextLink = "";
 
-        const nextElement = $('a:contains("Chương sau"), a.next, a[title="Chương sau"]'); 
-        if (nextElement.length) {
-            nextLink = nextElement.attr('href');
-            if (nextLink && !nextLink.startsWith('http')) {
-                const origin = new URL(url).origin;
-                nextLink = origin + nextLink;
-            }
+        const nextElement = $('a.next-chapter');
+        let nextLink = nextElement.attr('href');
+
+        // LƯU Ý QUAN TRỌNG: Cheerio lấy href gốc (VD: /chuong-2.html), 
+        // nó không tự thêm domain như Puppeteer. Ta phải tự nối domain vào.
+        if (nextLink && !nextLink.startsWith('http')) {
+            // Sử dụng URL constructor để nối domain gốc vào link tương đối
+            const absoluteUrl = new URL(nextLink, url).href;
+            nextLink = absoluteUrl;
         }
 
         if (chapterDiv.length) {

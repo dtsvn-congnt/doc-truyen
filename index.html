@@ -3,22 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Máy Đọc (V21 - Smart Split)</title>
+    <title>Máy Đọc (V21.1 - Fix Nút)</title>
     <style>
         :root { --bg-body: #eef2f3; --bg-container: #ffffff; --text-main: #333333; --text-sub: #666666; --border-color: #dddddd; --box-bg: #ffffff; --ctx-prev-color: #888888; --ctx-next-color: #555555; --hl-bg: #fff3cd; --hl-border: #ffc107; --hl-text: #856404; --progress-bg: #f8f9fa; }
         [data-theme="dark"] { --bg-body: #000000; --bg-container: #121212; --text-main: #e0e0e0; --text-sub: #aaaaaa; --border-color: #333333; --box-bg: #1e1e1e; --ctx-prev-color: #777777; --ctx-next-color: #cccccc; --hl-bg: #3a3000; --hl-border: #665c00; --hl-text: #ffd54f; --progress-bg: #2c2c2c; }
         
         body { font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; background: var(--bg-body); color: var(--text-main); margin: 0; padding: 20px; transition: background 0.3s; min-height: 100vh; }
-        .container { background: var(--bg-container); padding: 20px; border-radius: 12px; box-shadow: 0 6px 15px rgba(0,0,0,0.1); width: 100%; max-width: 650px; text-align: center; box-sizing: border-box; }
+        .container { background: var(--bg-container); padding: 20px; border-radius: 12px; box-shadow: 0 6px 15px rgba(0,0,0,0.1); width: 100%; max-width: 650px; text-align: center; box-sizing: border-box; padding-bottom: 80px; /* Chừa chỗ cho nút */ }
         
         @media (max-width: 768px) {
-            body { padding: 0; } .container { border-radius: 0; box-shadow: none; min-height: 100vh; padding: 15px; }
+            body { padding: 0; } 
+            .container { border-radius: 0; box-shadow: none; min-height: 100vh; padding: 15px; padding-bottom: 100px; /* Tăng khoảng trống đáy mobile */ }
         }
 
         input[type="text"] { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--box-bg); color: var(--text-main); box-sizing: border-box; }
         .control-group { margin: 10px 0; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
         button { padding: 12px 15px; cursor: pointer; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: 600; flex: 1; max-width: 120px; white-space: nowrap; }
-        .btn-blue { background: #007bff; } .btn-red { background: #dc3545; } .btn-gray { background: #6c757d; } .btn-green { background: #28a745; width: 100%; margin-top: 15px; max-width: none; }
+        .btn-blue { background: #007bff; } .btn-red { background: #dc3545; } .btn-gray { background: #6c757d; } 
+        
+        /* Nút chương sau: Luôn hiện */
+        .btn-green { background: #28a745; width: 100%; margin-top: 15px; max-width: none; padding: 15px; font-size: 18px; }
+        .btn-green:disabled { background: #cccccc; cursor: not-allowed; opacity: 0.7; }
+
         .btn-theme { background: transparent; border: 1px solid var(--text-sub); color: var(--text-main); padding: 5px 10px; font-size: 12px; margin-bottom: 10px; border-radius: 20px; flex: none; width: auto; }
 
         .progress-wrapper { background: var(--progress-bg); padding: 12px; border-radius: 8px; margin: 15px 0; border: 1px solid var(--border-color); }
@@ -40,7 +46,7 @@
 
     <div class="container">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-            <h3 style="margin: 0; color: var(--text-main);">📖 Máy Đọc V21</h3>
+            <h3 style="margin: 0; color: var(--text-main);">📖 Máy Đọc V21.1</h3>
             <button onclick="toggleTheme()" class="btn-theme" id="themeBtn">🌙 Tối</button>
         </div>
         
@@ -75,13 +81,14 @@
                 <input type="checkbox" id="useGoogleOnline" checked>
                 <span class="slider"></span>
             </label>
-            <span style="font-size: 14px; font-weight: bold; color: var(--text-main);">Online (Khuyên dùng)</span>
+            <span style="font-size: 14px; font-weight: bold; color: var(--text-main);">Online (Google Proxy)</span>
         </div>
 
-        <button onclick="goToNext()" id="btnNext" class="btn-green" style="display: none;">⏭ CHƯƠNG SAU</button>
+        <button onclick="goToNext()" id="btnNext" class="btn-green" disabled>⏭ CHƯA CÓ LINK SAU</button>
         <input type="hidden" id="nextUrlHidden">
+        
         <div style="margin-top: 15px; font-size: 14px;">
-            <input type="checkbox" id="autoNext" checked> <label for="autoNext" style="color: var(--text-main)">Tự động chuyển</label>
+            <input type="checkbox" id="autoNext" checked> <label for="autoNext" style="color: var(--text-main)">Tự động chuyển chương</label>
         </div>
     </div>
 
@@ -103,71 +110,43 @@
         let audioPlayer = new Audio();
         let wakeLock = null;
         
-        // Cấu trúc dữ liệu mới: sentences không phải là mảng string nữa, mà là mảng object
-        // { text: "Câu hiển thị full", chunks: ["phần audio 1", "phần audio 2"] }
         let state = { sentences: [], index: 0, subIndex: 0, isReading: false, dataLoaded: false };
-        let audioCache = new Map(); // Key: "index_subIndex" -> Value: blobUrl
-        const PRELOAD_LIMIT = 2; // Preload 2 câu tiếp theo (mỗi câu có thể nhiều chunks)
-
-        // --- 1. XỬ LÝ DỮ LIỆU ---
+        let audioCache = new Map(); 
+        const PRELOAD_LIMIT = 2; 
 
         function processContent(fullText) {
             if (!fullText) return [];
             let clean = fullText.replace(/\.\.+/g, '.');
-            // Bước 1: Tách câu theo dấu chấm câu để hiển thị UI (Visual Sentences)
             let rawSentences = clean.replace(/([.?!;\n]+[”"']*)/g, "$1|").split("|").map(s => s.trim()).filter(s => s.length > 0);
-            
             let finalData = [];
-
-            // Bước 2: Với mỗi câu UI, kiểm tra xem có cần cắt nhỏ audio không
             rawSentences.forEach(sentence => {
                 let chunks = [];
-                if (sentence.length > 180) {
-                    // Nếu câu dài > 180 ký tự -> Cắt nhỏ để audio không lỗi
-                    chunks = splitLongString(sentence);
-                } else {
-                    // Nếu câu ngắn -> Audio là chính nó
-                    chunks = [sentence];
-                }
-                
-                // Chỉ thêm nếu có nội dung chữ
+                if (sentence.length > 180) { chunks = splitLongString(sentence); } 
+                else { chunks = [sentence]; }
                 if (/[a-zA-Z0-9\u00C0-\u1EF9]/.test(sentence)) {
-                    finalData.push({
-                        text: sentence, // Để hiển thị
-                        chunks: chunks  // Để đọc (mảng)
-                    });
+                    finalData.push({ text: sentence, chunks: chunks });
                 }
             });
             return finalData;
         }
 
-        // Hàm cắt nhỏ câu dài cho Audio (Logic cũ nhưng áp dụng cho chunks)
         function splitLongString(text) {
-            // Cắt theo dấu phẩy hoặc khoảng trắng ở giữa
             let parts = [];
-            // Regex tìm dấu phẩy, dấu hai chấm
             let temp = text.replace(/(,[”"']*)\s/g, "$1|"); 
             let arr = temp.split("|");
-            
             arr.forEach(s => {
                 s = s.trim();
                 if (!s) return;
                 if (s.length > 180) {
-                    // Vẫn dài -> Cắt đôi thô bạo
                     let mid = Math.floor(s.length / 2);
                     let splitIndex = s.indexOf(' ', mid);
-                    if (splitIndex !== -1) {
-                         parts.push(s.substring(0, splitIndex));
-                         parts.push(s.substring(splitIndex + 1));
-                    } else { parts.push(s); }
-                } else {
-                    parts.push(s);
-                }
+                    if (splitIndex !== -1) { parts.push(s.substring(0, splitIndex)); parts.push(s.substring(splitIndex + 1)); } 
+                    else { parts.push(s); }
+                } else { parts.push(s); }
             });
             return parts;
         }
 
-        // --- 2. HỆ THỐNG PRELOAD CHUNKS ---
         async function fetchAudioBlob(text) {
             try {
                 const response = await fetch(`/api/tts?text=${encodeURIComponent(text)}`);
@@ -178,18 +157,13 @@
         }
 
         async function manageCache(currentIndex) {
-            // Preload chunks của câu hiện tại và các câu tiếp theo
             for (let i = currentIndex; i < Math.min(currentIndex + PRELOAD_LIMIT, state.sentences.length); i++) {
                 let sentenceObj = state.sentences[i];
-                // Loop qua từng chunk của câu đó
                 sentenceObj.chunks.forEach((chunkText, chunkIdx) => {
                     let key = `${i}_${chunkIdx}`;
-                    if (!audioCache.has(key)) {
-                        fetchAudioBlob(chunkText).then(url => { if (url) audioCache.set(key, url); });
-                    }
+                    if (!audioCache.has(key)) { fetchAudioBlob(chunkText).then(url => { if (url) audioCache.set(key, url); }); }
                 });
             }
-            // Dọn dẹp cache cũ
             for (let i = 0; i < currentIndex - 1; i++) {
                  let sentenceObj = state.sentences[i];
                  sentenceObj.chunks.forEach((_, cIdx) => {
@@ -199,11 +173,8 @@
             }
         }
 
-        // --- 3. LOGIC PHÁT (V21 - HỖ TRỢ CHUNKS) ---
-
         async function playNextSentence() {
             if (!state.isReading) return;
-            // Hết truyện
             if (state.index >= state.sentences.length) { onFinishChapter(); return; }
 
             updateReadingBoxUI();
@@ -212,16 +183,9 @@
             const currentObj = state.sentences[state.index];
             
             if (checkGoogle.checked) {
-                // --- CHẾ ĐỘ ONLINE (Chunks) ---
-                manageCache(state.index); // Kích hoạt preload
-
-                // Lấy chunk hiện tại cần đọc (subIndex)
+                manageCache(state.index); 
                 if (state.subIndex >= currentObj.chunks.length) {
-                    // Đã đọc hết các chunks của câu này -> Sang câu tiếp theo
-                    state.index++;
-                    state.subIndex = 0;
-                    playNextSentence();
-                    return;
+                    state.index++; state.subIndex = 0; playNextSentence(); return;
                 }
 
                 let chunkText = currentObj.chunks[state.subIndex];
@@ -244,20 +208,11 @@
                         setTimeout(() => { if(state.isReading) { state.subIndex++; playNextSentence(); }}, 500);
                     });
 
-                    audioPlayer.onended = () => {
-                        if (state.isReading) {
-                            // Hết chunk này -> Tăng subIndex để đọc chunk tiếp theo của câu này
-                            state.subIndex++;
-                            playNextSentence(); 
-                        }
-                    };
+                    audioPlayer.onended = () => { if (state.isReading) { state.subIndex++; playNextSentence(); } };
                     audioPlayer.onerror = () => { if (state.isReading) { state.subIndex++; playNextSentence(); } };
-                } else {
-                    state.subIndex++; playNextSentence();
-                }
+                } else { state.subIndex++; playNextSentence(); }
 
             } else {
-                // Chế độ Offline (Đọc nguyên text hiển thị)
                 speakNative(currentObj.text);
             }
         }
@@ -270,30 +225,18 @@
             if (voice) utterance.voice = voice;
             utterance.rate = parseFloat(speedInput.value);
             utterance.lang = 'vi-VN';
-            utterance.onend = () => { 
-                if (state.isReading) { 
-                    state.index++; 
-                    state.subIndex = 0; // Reset subIndex cho Offline
-                    playNextSentence(); 
-                } 
-            };
-            utterance.onerror = (e) => { 
-                if (e.error !== 'interrupted' && state.isReading) { state.index++; playNextSentence(); } 
-            };
+            utterance.onend = () => { if (state.isReading) { state.index++; state.subIndex = 0; playNextSentence(); } };
+            utterance.onerror = (e) => { if (e.error !== 'interrupted' && state.isReading) { state.index++; playNextSentence(); } };
             window.uttr = utterance;
             window.synth.speak(utterance);
         }
 
-        // --- UI ---
         function updateReadingBoxUI() {
             const i = state.index;
             const s = state.sentences;
             let html = '';
-            // Câu trước
             if (i > 0) html += `<div class="ctx-prev">${s[i - 1].text}</div>`;
-            // Câu hiện tại
             html += `<div class="ctx-current">${s[i].text}</div>`;
-            // 2 Câu sau
             if (i < s.length - 1) html += `<div class="ctx-next">${s[i + 1].text}</div>`;
             if (i < s.length - 2) html += `<div class="ctx-next">${s[i + 2].text}</div>`;
             readingBox.innerHTML = html;
@@ -301,7 +244,6 @@
 
         function updateProgressBar() { progressBar.value = state.index; progressLabel.innerText = `${state.index + 1}/${state.sentences.length}`; }
 
-        // --- CONTROL ---
         function unlockAudio() {
             if (window.synth && !window.synth.speaking) { const u = new SpeechSynthesisUtterance(" "); u.volume=0; window.synth.speak(u); }
             audioPlayer.play().catch(()=>{}); audioPlayer.pause();
@@ -327,8 +269,7 @@
         function manualSeek(step) {
             if (!state.dataLoaded) return;
             handleStopButton();
-            state.index += step;
-            state.subIndex = 0; // Reset subIndex khi tua
+            state.index += step; state.subIndex = 0;
             if (state.index < 0) state.index = 0;
             if (state.index >= state.sentences.length) state.index = state.sentences.length - 1;
             state.isReading = true; unlockAudio(); playNextSentence(); 
@@ -337,8 +278,7 @@
         function seekToBar() {
             if (!state.dataLoaded) return;
             handleStopButton();
-            state.index = parseInt(progressBar.value);
-            state.subIndex = 0;
+            state.index = parseInt(progressBar.value); state.subIndex = 0;
             state.isReading = true; unlockAudio(); playNextSentence();
         }
 
@@ -347,17 +287,22 @@
             try {
                 const response = await fetch(`/api/speak?url=${encodeURIComponent(url)}`);
                 const data = await response.json();
-                
-                // Dùng hàm processContent mới để tạo cấu trúc object
                 state.sentences = processContent(data.content);
-                
                 if (state.sentences.length === 0) throw new Error("Không có nội dung");
                 
                 state.index = 0; state.subIndex = 0; state.dataLoaded = true; state.isReading = true;
                 progressBar.max = state.sentences.length - 1; progressBar.value = 0;
                 
-                if (data.nextLink) { nextUrlInput.value = data.nextLink; btnNext.style.display = 'block'; btnNext.innerText = "⏭ CHƯƠNG SAU"; } 
-                else { nextUrlInput.value = ""; btnNext.style.display = 'none'; }
+                // LOGIC NÚT CHUYỂN TẬP
+                if (data.nextLink) { 
+                    nextUrlInput.value = data.nextLink; 
+                    btnNext.innerText = "⏭ CHƯƠNG SAU (Có sẵn)";
+                    btnNext.disabled = false;
+                } else { 
+                    nextUrlInput.value = ""; 
+                    btnNext.innerText = "⛔ KHÔNG CÓ LINK SAU";
+                    btnNext.disabled = true;
+                }
                 
                 btnStart.disabled = false; unlockAudio(); playNextSentence(); 
             } catch (err) { readingBox.innerText = "❌ Lỗi: " + err.message; statusLog.innerText = "Lỗi tải trang."; btnStart.disabled = false; }
