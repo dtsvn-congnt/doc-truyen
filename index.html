@@ -3,19 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Máy Đọc (V15 Google MP3)</title>
+    <title>Máy Đọc (V18 - Preload Siêu Tốc)</title>
     <style>
-        /* GIỮ NGUYÊN GIAO DIỆN CŨ */
-        :root {
-            --bg-body: #eef2f3; --bg-container: #ffffff; --text-main: #333333; --text-sub: #666666; --border-color: #dddddd;
-            --box-bg: #ffffff; --ctx-prev-color: #888888; --ctx-next-color: #555555;
-            --hl-bg: #fff3cd; --hl-border: #ffc107; --hl-text: #856404; --progress-bg: #f8f9fa;
-        }
-        [data-theme="dark"] {
-            --bg-body: #121212; --bg-container: #1e1e1e; --text-main: #e0e0e0; --text-sub: #aaaaaa; --border-color: #333333;
-            --box-bg: #252525; --ctx-prev-color: #777777; --ctx-next-color: #cccccc;
-            --hl-bg: #3a3000; --hl-border: #665c00; --hl-text: #ffd54f; --progress-bg: #2c2c2c;
-        }
+        :root { --bg-body: #eef2f3; --bg-container: #ffffff; --text-main: #333333; --text-sub: #666666; --border-color: #dddddd; --box-bg: #ffffff; --ctx-prev-color: #888888; --ctx-next-color: #555555; --hl-bg: #fff3cd; --hl-border: #ffc107; --hl-text: #856404; --progress-bg: #f8f9fa; }
+        [data-theme="dark"] { --bg-body: #121212; --bg-container: #1e1e1e; --text-main: #e0e0e0; --text-sub: #aaaaaa; --border-color: #333333; --box-bg: #252525; --ctx-prev-color: #777777; --ctx-next-color: #cccccc; --hl-bg: #3a3000; --hl-border: #665c00; --hl-text: #ffd54f; --progress-bg: #2c2c2c; }
         body { font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; padding-top: 20px; background: var(--bg-body); color: var(--text-main); transition: background 0.3s, color 0.3s; padding-bottom: 50px; }
         .container { background: var(--bg-container); padding: 20px; border-radius: 12px; box-shadow: 0 6px 15px rgba(0,0,0,0.2); width: 95%; max-width: 650px; text-align: center; transition: background 0.3s; }
         input[type="text"] { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-container); color: var(--text-main); box-sizing: border-box; }
@@ -27,22 +18,19 @@
         input[type="range"] { width: 100%; cursor: pointer; margin: 10px 0; height: 20px; }
         #readingBox { margin-top: 15px; padding: 15px; background: var(--box-bg); border: 1px solid var(--border-color); border-radius: 8px; text-align: left; max-height: 450px; overflow-y: auto; transition: background 0.3s; }
         .ctx-current { color: var(--hl-text); font-size: 20px; font-weight: 600; line-height: 1.6; background: var(--hl-bg); padding: 15px; border-radius: 8px; border-left: 5px solid var(--hl-border); margin: 15px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        
-        /* Toggle Switch cho chế độ Google */
         .switch-container { display: flex; align-items: center; justify-content: center; margin-top: 15px; gap: 10px; }
         .switch { position: relative; display: inline-block; width: 50px; height: 24px; }
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
         .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
-        input:checked + .slider { background-color: #2196F3; }
-        input:checked + .slider:before { transform: translateX(26px); }
+        input:checked + .slider { background-color: #2196F3; } input:checked + .slider:before { transform: translateX(26px); }
     </style>
 </head>
 <body>
 
     <div class="container">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-            <h3 style="margin: 0; color: var(--text-main);">📖 Máy Đọc (V15 Google)</h3>
+            <h3 style="margin: 0; color: var(--text-main);">🚀 Máy Đọc (V18 Preload)</h3>
             <button onclick="toggleTheme()" class="btn-theme" id="themeBtn">🌙 Chế độ tối</button>
         </div>
         
@@ -71,10 +59,10 @@
 
         <div class="switch-container">
             <label class="switch">
-                <input type="checkbox" id="useGoogleOnline">
+                <input type="checkbox" id="useGoogleOnline" checked>
                 <span class="slider"></span>
             </label>
-            <span style="font-size: 14px; font-weight: bold; color: var(--text-main);">Dùng Google Online (MP3)</span>
+            <span style="font-size: 14px; font-weight: bold; color: var(--text-main);">Chế độ Online (Khuyên dùng)</span>
         </div>
 
         <button onclick="goToNext()" id="btnNext" class="btn-green">⏭ CHƯƠNG SAU</button>
@@ -85,7 +73,6 @@
     </div>
 
     <script>
-        // --- 1. SETUP ---
         const urlInput = document.getElementById('urlInput');
         const readingBox = document.getElementById('readingBox');
         const statusLog = document.getElementById('statusLog');
@@ -98,50 +85,44 @@
         const themeBtn = document.getElementById('themeBtn');
         const checkGoogle = document.getElementById('useGoogleOnline');
 
-        // Hệ thống cũ (Native)
+        // Khởi tạo các biến global
         window.synth = window.speechSynthesis;
         window.uttr = null;
-        
-        // Hệ thống mới (Google Audio MP3)
         let audioPlayer = new Audio();
         let wakeLock = null;
-
         let state = { sentences: [], index: 0, isReading: false, dataLoaded: false };
+        let audioCache = new Map(); 
+        const PRELOAD_LIMIT = 3; 
 
-        // --- 2. HÀM PHÁT GOOGLE MP3 (HỆ THỐNG MỚI) ---
-        function playGoogleAudio(text) {
-            // Google TTS giới hạn ký tự, nếu câu dài quá phải cắt bớt (nhưng code splitTextSmart đã làm rồi)
-            // URL đặc biệt của Google
-            const speed = speedInput.value; // Google hỗ trợ speed 0.25 -> 2.0 (nhưng API này chỉ nhận 0.24-4.0 thực tế hơi khó chỉnh)
-            // Mẹo: Client tw-ob cho phép truy cập miễn phí
-            const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=vi&client=tw-ob&ttsspeed=${speed}`;
-            
-            audioPlayer.src = url;
-            audioPlayer.playbackRate = parseFloat(speed); // Chỉnh tốc độ bằng HTML5 Audio
-            audioPlayer.play().catch(e => {
-                console.error("Lỗi phát MP3:", e);
-                statusLog.innerText = "⚠️ Lỗi mạng hoặc bị chặn IP. Hãy thử tắt/bật lại.";
-                // Nếu lỗi mạng, tự động nhảy câu tiếp để không kẹt
-                if(state.isReading) setTimeout(() => { state.index++; speakRouter(); }, 1000);
-            });
-
-            // Khi đọc xong file MP3 -> Nhảy câu tiếp
-            audioPlayer.onended = () => {
-                if (state.isReading) {
-                    state.index++;
-                    speakRouter(); // Đệ quy
-                }
-            };
-
-            audioPlayer.onerror = () => {
-                console.warn("Lỗi tải file MP3, bỏ qua câu này.");
-                if (state.isReading) { state.index++; speakRouter(); }
-            };
+        async function fetchAudioBlob(text) {
+            try {
+                const response = await fetch(`/api/tts?text=${encodeURIComponent(text)}`);
+                if (!response.ok) throw new Error("Lỗi tải");
+                const blob = await response.blob();
+                return URL.createObjectURL(blob); 
+            } catch (e) {
+                console.error("Lỗi fetch:", e);
+                return null;
+            }
         }
 
-        // --- 3. BỘ ĐIỀU HƯỚNG (ROUTER) ---
-        // Hàm này sẽ quyết định dùng cách cũ hay cách mới
-        function speakRouter() {
+        async function manageCache(currentIndex) {
+            for (let i = currentIndex; i < currentIndex + PRELOAD_LIMIT; i++) {
+                if (i < state.sentences.length && !audioCache.has(i)) {
+                    fetchAudioBlob(state.sentences[i]).then(url => {
+                        if (url) audioCache.set(i, url);
+                    });
+                }
+            }
+            for (let i = 0; i < currentIndex - 2; i++) { 
+                if (audioCache.has(i)) {
+                    URL.revokeObjectURL(audioCache.get(i));
+                    audioCache.delete(i);
+                }
+            }
+        }
+
+        async function playNextSentence() {
             if (!state.isReading) return;
             if (state.index >= state.sentences.length) { onFinishChapter(); return; }
 
@@ -151,58 +132,73 @@
             const text = state.sentences[state.index];
 
             if (checkGoogle.checked) {
-                // CÁCH 1: DÙNG GOOGLE MP3 ONLINE
-                playGoogleAudio(text);
+                manageCache(state.index + 1);
+                let audioUrl = audioCache.get(state.index);
+
+                if (!audioUrl) {
+                    statusLog.innerText = "⏳ Đang tải...";
+                    audioUrl = await fetchAudioBlob(text);
+                    if (audioUrl) audioCache.set(state.index, audioUrl);
+                }
+
+                if (audioUrl) {
+                    statusLog.innerText = "▶ Đang đọc...";
+                    audioPlayer.src = audioUrl;
+                    audioPlayer.playbackRate = parseFloat(speedInput.value);
+                    
+                    audioPlayer.play().catch(e => {
+                        console.error("Autoplay bị chặn:", e);
+                        setTimeout(() => { if(state.isReading) { state.index++; playNextSentence(); }}, 500);
+                    });
+
+                    audioPlayer.onended = () => {
+                        if (state.isReading) {
+                            state.index++;
+                            playNextSentence(); 
+                        }
+                    };
+                    
+                    audioPlayer.onerror = () => {
+                        console.warn("Lỗi file âm thanh, bỏ qua.");
+                        if (state.isReading) { state.index++; playNextSentence(); }
+                    };
+                } else {
+                    state.index++; playNextSentence();
+                }
+
             } else {
-                // CÁCH 2: DÙNG HỆ THỐNG MÁY (CŨ)
-                speakNative(text);
+                speakNative(text); 
             }
         }
 
-        // --- 4. HÀM PHÁT NATIVE (CŨ) ---
         function speakNative(text) {
             window.synth.cancel();
             const utterance = new SpeechSynthesisUtterance(text);
-            
-            // Lấy giọng tốt nhất có thể
             let voices = window.synth.getVoices();
             let voice = voices.find(v => v.lang.includes('vi'));
             if (voice) utterance.voice = voice;
-
             utterance.rate = parseFloat(speedInput.value);
             utterance.lang = 'vi-VN';
-            
-            utterance.onend = () => { if (state.isReading) { state.index++; speakRouter(); } };
-            utterance.onerror = (e) => { 
-                if (e.error === 'interrupted') return;
-                if (state.isReading) { state.index++; speakRouter(); } 
-            };
-
+            utterance.onend = () => { if (state.isReading) { state.index++; playNextSentence(); } };
+            utterance.onerror = (e) => { if (e.error !== 'interrupted' && state.isReading) { state.index++; playNextSentence(); } };
             window.uttr = utterance;
             window.synth.speak(utterance);
         }
 
-        // --- 5. ĐIỀU KHIỂN CHUNG ---
         function unlockAudio() {
-            // Mồi lửa cho cả 2 hệ thống
-            if (!window.synth.speaking) {
-                const u = new SpeechSynthesisUtterance(" "); u.volume = 0; u.duration=0; window.synth.speak(u);
+            if (window.synth && !window.synth.speaking) { 
+                const u = new SpeechSynthesisUtterance(" "); u.volume=0; window.synth.speak(u); 
             }
-            // Mồi lửa cho Audio Player
-            audioPlayer.play().catch(()=>{}); 
-            audioPlayer.pause();
+            audioPlayer.play().catch(()=>{}); audioPlayer.pause();
         }
 
         async function handlePlayButton() {
-            unlockAudio();
-            requestWakeLock();
-
+            unlockAudio(); requestWakeLock();
             const url = urlInput.value;
             if (!url) { alert("Thiếu Link!"); return; }
 
             if (state.dataLoaded && !state.isReading) {
-                state.isReading = true; speakRouter();
-                statusLog.innerText = "▶ Đang đọc tiếp...";
+                state.isReading = true; playNextSentence();
                 return;
             }
             if (!state.dataLoaded) await fetchAndStart(url);
@@ -210,84 +206,81 @@
 
         function handleStopButton() {
             state.isReading = false;
-            // Dừng cả 2 hệ thống
-            if (window.uttr) window.uttr.onend = null;
-            window.synth.cancel();
-            audioPlayer.pause();
-            audioPlayer.onended = null;
-            
+            if (window.uttr) window.uttr.onend = null; window.synth.cancel();
+            audioPlayer.pause(); audioPlayer.onended = null;
             statusLog.innerText = "⏹ Đã dừng.";
             if (wakeLock) { wakeLock.release(); wakeLock = null; }
+            audioCache.forEach(url => URL.revokeObjectURL(url));
+            audioCache.clear();
         }
 
         function manualSeek(step) {
             if (!state.dataLoaded) return;
-            handleStopButton(); // Dừng tất cả trước khi nhảy
-            
+            handleStopButton();
             state.index += step;
             if (state.index < 0) state.index = 0;
             if (state.index >= state.sentences.length) state.index = state.sentences.length - 1;
-
-            state.isReading = true; 
-            unlockAudio(); // Unlock lại cho chắc
-            speakRouter(); 
+            state.isReading = true; unlockAudio(); playNextSentence(); 
         }
 
         function seekToBar() {
             if (!state.dataLoaded) return;
             handleStopButton();
             state.index = parseInt(progressBar.value);
-            state.isReading = true; 
-            unlockAudio();
-            speakRouter();
+            state.isReading = true; unlockAudio(); playNextSentence();
         }
 
-        // --- CÁC HÀM PHỤ TRỢ (GIỮ NGUYÊN) ---
         async function fetchAndStart(url) {
-            handleStopButton();
-            btnStart.disabled = true; statusLog.innerText = "⏳ Đang tải dữ liệu...";
+            handleStopButton(); btnStart.disabled = true; statusLog.innerText = "⏳ Đang tải truyện...";
             try {
                 const response = await fetch(`/api/speak?url=${encodeURIComponent(url)}`);
                 const data = await response.json();
-                if (!response.ok) throw new Error(data.error || "Lỗi server");
-
+                
                 state.sentences = splitTextSmart(data.content);
+                
                 if (state.sentences.length === 0) throw new Error("Không có nội dung");
-
+                
                 state.index = 0; state.dataLoaded = true; state.isReading = true;
                 progressBar.max = state.sentences.length - 1; progressBar.value = 0;
 
-                if (data.nextLink) {
-                    nextUrlInput.value = data.nextLink; btnNext.style.display = 'block'; btnNext.innerText = "⏭ CHƯƠNG SAU (Có sẵn)";
-                } else { nextUrlInput.value = ""; btnNext.style.display = 'none'; }
+                if (data.nextLink) { nextUrlInput.value = data.nextLink; btnNext.style.display = 'block'; btnNext.innerText = "⏭ CHƯƠNG SAU (Có sẵn)"; } 
+                else { nextUrlInput.value = ""; btnNext.style.display = 'none'; }
+                
+                btnStart.disabled = false; unlockAudio();
+                playNextSentence(); 
 
-                btnStart.disabled = false;
-                unlockAudio();
-                speakRouter();
-
-            } catch (err) {
-                readingBox.innerText = "❌ Lỗi: " + err.message;
-                statusLog.innerText = "Lỗi tải trang."; btnStart.disabled = false;
-            }
+            } catch (err) { readingBox.innerText = "❌ Lỗi: " + err.message; statusLog.innerText = "Lỗi tải trang."; btnStart.disabled = false; }
         }
 
-        function updateReadingBoxUI() {
-            if (state.sentences.length === 0) return;
-            readingBox.innerHTML = `<div class="ctx-current">${state.sentences[state.index]}</div>`;
-        }
-        function updateProgressBar() {
-            progressBar.value = state.index;
-            progressLabel.innerText = `Câu: ${state.index + 1} / ${state.sentences.length}`;
-        }
+        // BỘ TÁCH CÂU V18 (Fix lỗi 500 & 427 characters)
         function splitTextSmart(text) {
             if (!text) return [];
             let clean = text.replace(/\.\.+/g, '.');
-            clean = clean.replace(/([.?!;\n]+[”"']*)/g, "$1|");
-            return clean.split("|").map(s => s.trim()).filter(s => {
-                const hasLetters = /[a-zA-Z0-9\u00C0-\u1EF9]/.test(s);
-                return s.length > 0 && hasLetters;
+            clean = clean.replace(/([.?!;:\n]+[”"']*)/g, "$1|"); 
+            clean = clean.replace(/(,[”"']*)\s/g, "$1|");      
+            
+            let arr = clean.split("|");
+            let finalArr = [];
+            arr.forEach(s => {
+                s = s.trim();
+                if (!s) return;
+                // Chặt đôi nếu câu vẫn quá dài (>180 ký tự)
+                if (s.length > 180) {
+                    let mid = Math.floor(s.length / 2);
+                    let splitIndex = s.indexOf(' ', mid);
+                    if (splitIndex !== -1) {
+                         finalArr.push(s.substring(0, splitIndex));
+                         finalArr.push(s.substring(splitIndex + 1));
+                         return;
+                    }
+                }
+                if (/[a-zA-Z0-9\u00C0-\u1EF9]/.test(s)) finalArr.push(s);
             });
+            return finalArr;
         }
+
+        function updateReadingBoxUI() { readingBox.innerHTML = `<div class="ctx-current">${state.sentences[state.index]}</div>`; }
+        function updateProgressBar() { progressBar.value = state.index; progressLabel.innerText = `Câu: ${state.index + 1} / ${state.sentences.length}`; }
         function toggleTheme() {
             const body = document.body;
             if (body.getAttribute('data-theme') === 'dark') { body.removeAttribute('data-theme'); themeBtn.innerText = "🌙 Chế độ tối"; } 
