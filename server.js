@@ -33,9 +33,24 @@ app.get('/api/speak', async (req, res) => {
     if (!url) return res.status(400).json({ error: 'Thiếu URL' });
 
     try {
-        const response = await axios.get(url, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+       const { gotScraping } = await import('got-scraping');
+        const response = await gotScraping({
+            url: url,
+            headerGeneratorOptions: {
+                browsers: [{ name: 'chrome', minVersion: 110 }],
+                devices: ['desktop'],
+                locales: ['vi-VN'],
+                operatingSystems: ['windows'],
+            },
+            headers: {
+                // Nếu người dùng nhập cookie thì gắn vào
+                ...(userCookie ? { 'cookie': userCookie } : {})
+            },
+            // Tự động xử lý redirect, tự giải nén gzip
         });
+        // -------------------------------------------
+
+
         const $ = cheerio.load(response.data);
 
         // Logic lấy nội dung
