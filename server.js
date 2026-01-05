@@ -6,7 +6,7 @@ const path = require('path'); // Thêm thư viện đường dẫn
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// --- SỬA LỖI CANNOT GET / ---
+
 // Cho phép server phục vụ các file tĩnh (html, css) ở ngay thư mục hiện tại
 app.use(express.static(__dirname));
 
