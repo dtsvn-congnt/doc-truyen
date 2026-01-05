@@ -7,7 +7,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 
-// Cho phép server phục vụ các file tĩnh (html, css) ở ngay thư mục hiện tại
 app.use(express.static(__dirname));
 
 // Khi người dùng vào trang chủ (localhost:3000), gửi file index.html về
