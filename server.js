@@ -45,18 +45,27 @@ let browserInstance;
 
 // Hàm này CHỈ giữ vai trò quản lý lõi trình duyệt (Giúp tiết kiệm RAM tối đa)
 async function getBrowser() {
+    // Kiểm tra xem instance cũ còn sống không, nếu không thì tạo mới
     if (!browserInstance || !browserInstance.isConnected()) {
-        console.log("Khởi tạo hoặc khởi động lại Playwright Chromium instance...");
+        console.log("Khởi tạo tiến trình Chromium siêu nhẹ...");
+        
+        const { chromium } = require('playwright-extra');
+        const stealth = require('puppeteer-extra-plugin-stealth')();
+        chromium.use(stealth);
+
         browserInstance = await chromium.launch({
             headless: true,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
+                '--disable-dev-shm-usage', // Ép sử dụng bộ nhớ /tmp thay vì /dev/shm (Tránh crash trên Docker)
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
                 '--no-zygote',
-                '--single-process' // Rất quan trọng để tối ưu tài nguyên trên Onrender Free
+                '--single-process',       // Chạy tất cả các tab trên cùng 1 luồng để tiết kiệm RAM tối đa
+                '--disable-gpu',           // Tắt card đồ họa ảo
+                '--disable-extensions',    // Tắt các tiện ích mở rộng ngầm
+                '--js-flags="--max-old-space-size=128"' // Giới hạn bộ nhớ JavaScript của V8 Engine
             ]
         });
     }
@@ -92,7 +101,7 @@ app.get('/api/speak', async (req, res) => {
 
         // 💡 QUAN TRỌNG: Đợi 4-5 giây để Cloudflare tự chạy ngầm đoạn mã JavaScript thử thách
         console.log("Đang đợi Cloudflare xác thực ẩn...");
-        await page.waitForTimeout(4500);
+        await page.waitForTimeout(99999);
 
         // Lấy nội dung HTML đã gỡ Cloudflare thành công
         const body = await page.content();
