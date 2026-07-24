@@ -2,19 +2,18 @@ const express = require('express');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const googleTTS = require('google-tts-api');
-const path = require('path'); // Thêm thư viện đường dẫn
+const pako = require('pako');
+const path = require('path');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-
 app.use(express.static(__dirname));
 
-// Khi người dùng vào trang chủ (localhost:3000), gửi file index.html về
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// --- DANH SÁCH TÊN MIỀN GOOGLE (XOAY VÒNG) ---
 const googleHosts = [
     'https://translate.google.com',
     'https://translate.google.com.vn',
@@ -26,13 +25,39 @@ const googleHosts = [
     'https://translate.google.co.in'
 ];
 
+// --- HÀM GIẢI MÃ DATA_X ---
+function decodeContent(encodedString) {
+    const s = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    const c = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_';
+
+    let base64String = '';
+    for (const char of encodedString) {
+        const idx = c.indexOf(char);
+        base64String += (idx > -1) ? s[idx] : char;
+    }
+
+    // Sử dụng atob (có sẵn trong Node.js v16+)
+    // Hoặc dùng Buffer cho các phiên bản cũ hơn:
+    // const binaryData = Buffer.from(base64String, 'base64');
+    const binaryData = Uint8Array.from(atob(base64String), c => c.charCodeAt(0));
+
+    // Giải nén bằng Pako để có Uint8Array
+    const decompressedData = pako.inflate(binaryData);
+    
+    // Chuyển Uint8Array thành chuỗi text UTF-8
+    const decodedHtml = new TextDecoder().decode(decompressedData);
+    return decodedHtml;
+}
+
 // --- 1. API LẤY NỘI DUNG TRUYỆN ---
 app.get('/api/speak', async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Thiếu URL' });
 
     try {
-       const { gotScraping } = await import('got-scraping');
+        // Import động got-scraping (nếu xài module ES trong CommonJS)
+        const { gotScraping } = await import('got-scraping');
+        
         const response = await gotScraping({
             url: url,
             headerGeneratorOptions: {
@@ -41,49 +66,52 @@ app.get('/api/speak', async (req, res) => {
                 locales: ['vi-VN'],
                 operatingSystems: ['windows'],
             },
-            
-            // Tự động xử lý redirect, tự giải nén gzip
         });
-        // -------------------------------------------
-
 
         const $ = cheerio.load(response.body);
 
-        // Logic lấy nội dung
-        const chapterDiv = $('article.prose')
-        console.log(chapterDiv);
-        
-        let content = "";
+        const nextElement = $('div.nav-next a');
+        let nextLink = nextElement.attr('href');
 
-        const nextElement = $('button.btn-nav-chapter:contains("Tiếp")');
-        let nextLink = nextElement.closest('a').attr('href');
-
-        // LƯU Ý QUAN TRỌNG: Cheerio lấy href gốc (VD: /chuong-2.html), 
-        // nó không tự thêm domain như Puppeteer. Ta phải tự nối domain vào.
         if (nextLink && !nextLink.startsWith('http')) {
-            // Sử dụng URL constructor để nối domain gốc vào link tương đối
-            const absoluteUrl = new URL(nextLink, url).href;
-            nextLink = absoluteUrl;
+            nextLink = new URL(nextLink, url).href;
         }
 
-        if (chapterDiv.length) {
-            chapterDiv.find('br').each((i, el) => {
-                const prevNode = el.previousSibling;
-                if (prevNode && prevNode.type === 'text') {
-                    const text = prevNode.data.trim();
-                    if (/[.?!"”']$/.test(text)) {
-                        $(el).replaceWith(' ');
-                        return;
-                    }
-                }
-                $(el).replaceWith('. ');
-            });
-            chapterDiv.find('p').append('. ');
+        const chapterDiv = $('#chapter-reading-content');
+        let content = "";
 
+        // Thử lấy nội dung từ data_x trước
+        const scriptContent = $('script:contains("const data_x")').html();
+        const match = scriptContent ? scriptContent.match(/const data_x\s*=\s*['"]([^'"]+)['"]\s*;/) : null;
+
+        if (match && match[1]) {
+            const encodedContent = match[1];
+            const decodedHtml = decodeContent(encodedContent);
+
+            // Dùng Cheerio để phân tích HTML đã giải mã
+            const $content = cheerio.load(decodedHtml);
+            
+            // Thay thế <br> và thêm dấu chấm vào cuối <p>
+            $content('br').replaceWith('. ');
+            $content('p').append('. ');
+
+            content = $content.text();
+        } else if (chapterDiv.length) {
+            // Nếu không có data_x, quay lại cách lấy thông thường
+            console.log("Không tìm thấy data_x, sử dụng phương pháp cũ.");
+            chapterDiv.find('p').each((i, el) => {
+                $(el).append('. ');
+            });
             content = chapterDiv.text();
-            content = content.replace(/\.(\s*\.)+/g, '.');
-            content = content.replace(/([”"'])\./g, '$1'); 
-            content = content.replace(/\s+/g, ' ').trim();
+        }
+
+        // Nếu có nội dung, làm sạch nó
+        if (content) {
+             content = content
+                .replace(/\s+/g, ' ')
+                .replace(/\.(\s*\.)+/g, '.')
+                .replace(/([”"'])\./g, '$1')
+                .trim();
         }
 
         res.json({ content, nextLink });
@@ -100,14 +128,13 @@ app.get('/api/tts', async (req, res) => {
     if (!text) return res.status(400).send('Thiếu text');
 
     const randomHost = googleHosts[Math.floor(Math.random() * googleHosts.length)];
-    // console.log(`Đang tải từ: ${randomHost}...`);
 
     try {
         const url = googleTTS.getAudioUrl(text, {
             lang: 'vi',
             slow: false,
             host: randomHost,
-			splitPunctuation: true, // Tự động tách dấu câu
+            splitPunctuation: true,
         });
 
         const response = await axios({
@@ -134,5 +161,5 @@ app.get('/api/tts', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Server đã sửa lỗi xong! Truy cập ngay: http://localhost:${PORT}`);
+    console.log(`Server chạy tại: http://localhost:${PORT}`);
 });
