@@ -43,30 +43,47 @@ function decodeContent(encodedString) {
     return decodedHtml;
 }
 
+// --- PLAYWRIGHT BROWSER INSTANCE ---
+// Khởi tạo một biến để giữ instance của trình duyệt
+let browserInstance;
+
+// Hàm để khởi tạo hoặc lấy lại instance của trình duyệt
+async function getBrowser() {
+    if (!browserInstance) {
+        console.log("Khởi tạo Playwright browser instance...");
+        browserInstance = await chromium.launch({
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        });
+    }
+    return browserInstance;
+}
+
 // --- 1. API LẤY NỘI DUNG TRUYỆN ---
 app.get('/api/speak', async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Thiếu URL' });
 
+    let page; // Khai báo page ở ngoài để có thể đóng trong khối finally
     try {
-        // Sử dụng Playwright để lấy nội dung trang, giải pháp triệt để cho Cloudflare
-        const browser = await chromium.launch({
-            // Thêm đối số này để chạy tốt trong môi trường Docker
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        });
+        // Lấy instance trình duyệt đã được khởi tạo
+        const browser = await getBrowser();
         const context = await browser.newContext({
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
         });
-        const page = await context.newPage();
+        page = await context.newPage();
 
         console.log(`Đang tải trang bằng Playwright: ${url}`);
         // Tăng thời gian chờ lên 60 giây để Playwright có đủ thời gian giải quyết Cloudflare
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 }); // Tăng timeout lên 90s cho chắc chắn
+        console.log("Tải trang thành công.");
 
         // Lấy nội dung HTML sau khi trang đã tải xong
         const body = await page.content();
+        console.log(`Lấy nội dung HTML thành công, độ dài: ${body.length}`);
 
-        await browser.close();
+        // Không đóng browser, chỉ đóng page
+        await page.close();
+        console.log("Đã đóng page Playwright.");
 
         const $ = cheerio.load(body);
 
@@ -85,6 +102,7 @@ app.get('/api/speak', async (req, res) => {
         const match = scriptContent ? scriptContent.match(/const data_x\s*=\s*['"]([^'"]+)['"]\s*;/) : null;
 
         if (match && match[1]) {
+            console.log("Tìm thấy data_x. Bắt đầu giải mã...");
             const encodedContent = match[1];
             const decodedHtml = decodeContent(encodedContent);
 
@@ -113,8 +131,14 @@ app.get('/api/speak', async (req, res) => {
         res.json({ content, nextLink });
 
     } catch (error) {
-        console.error("Lỗi lấy truyện bằng Playwright:", error.message);
+        console.error("--- LỖI TRONG QUÁ TRÌNH SCRAPING ---");
+        console.error("Lỗi chi tiết:", error); // In ra toàn bộ lỗi để dễ debug
         res.status(500).json({ error: "Lỗi tải trang truyện bằng Playwright. " + error.message });
+    } finally {
+        // Đảm bảo page luôn được đóng dù có lỗi hay không
+        if (page && !page.isClosed()) {
+            await page.close();
+        }
     }
 });
 
@@ -156,6 +180,12 @@ app.get('/api/tts', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server chạy tại: http://localhost:${PORT}`);
+// Khởi động server sau khi đã khởi tạo trình duyệt lần đầu
+getBrowser().then(() => {
+    app.listen(PORT, () => {
+        console.log(`Server chạy tại: http://localhost:${PORT}`);
+    });
+}).catch(error => {
+    console.error("Không thể khởi tạo trình duyệt Playwright!", error);
+    process.exit(1);
 });
