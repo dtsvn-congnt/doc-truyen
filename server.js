@@ -93,12 +93,6 @@ app.get('/api/speak', async (req, res) => {
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
         console.log("Tải trang thành công.");
 
-        // --- CHỜ ĐỢI THÔNG MINH: Chờ cho đến khi phần tử nội dung truyện thực sự xuất hiện ---
-        // Đây là cách chắc chắn nhất để biết đã vượt qua Cloudflare
-        console.log("Đang chờ selector nội dung truyện ('#chapter-reading-content' hoặc 'script:contains(\"data_x\")')...");
-        await page.waitForSelector('#chapter-reading-content, script:contains("const data_x")', { timeout: 60000 });
-        console.log("Selector đã xuất hiện! Đã vượt qua Cloudflare.");
-
         // Lấy nội dung HTML sau khi trang đã tải xong
         const body = await page.content();
         console.log(`Lấy nội dung HTML thành công, độ dài: ${body.length}`);
@@ -109,33 +103,27 @@ app.get('/api/speak', async (req, res) => {
 
         const $ = cheerio.load(body);
 
-        const nextElement = $('div.nav-next a');
-        let nextLink = nextElement.attr('href');
-
-        if (nextLink && !nextLink.startsWith('http')) {
-            nextLink = new URL(nextLink, url).href;
-        }
-
-        const chapterDiv = $('#chapter-reading-content');
         let content = "";
 
-        // Tìm data_x để giải mã
+        // Ưu tiên tìm data_x để giải mã trước
         const scriptContent = $('script:contains("const data_x")').html();
         const match = scriptContent ? scriptContent.match(/const data_x\s*=\s*['"]([^'"]+)['"]\s*;/) : null;
 
         if (match && match[1]) {
             console.log("Tìm thấy data_x. Bắt đầu giải mã...");
             const encodedContent = match[1];
-            const decodedHtml = decodeContent(encodedContent);
+            const decodedHtml = decodeContent(encodedContent); // Hàm giải mã bạn đã có
 
             const $content = cheerio.load(decodedHtml);
+            // Thêm dấu chấm sau mỗi thẻ <br> và <p> để ngắt nghỉ khi đọc
             $content('br').replaceWith('. ');
             $content('p').append('. ');
 
             content = $content.text();
             console.log("Giải mã thành công data_x!");
-        } else if (chapterDiv.length) {
+        } else {
             console.log("Không tìm thấy data_x, sử dụng phương pháp cũ.");
+            const chapterDiv = $('#chapter-reading-content');
             chapterDiv.find('p').each((i, el) => {
                 $(el).append('. ');
             });
@@ -148,6 +136,13 @@ app.get('/api/speak', async (req, res) => {
                 .replace(/\.(\s*\.)+/g, '.')
                 .replace(/([”"'])\./g, '$1')
                 .trim();
+        }
+
+        // Lấy link chương tiếp theo
+        const nextElement = $('div.nav-next a');
+        let nextLink = nextElement.attr('href');
+        if (nextLink && !nextLink.startsWith('http')) {
+            nextLink = new URL(nextLink, url).href;
         }
 
         res.json({ content, nextLink });
