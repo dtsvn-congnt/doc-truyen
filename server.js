@@ -46,17 +46,29 @@ function decodeContent(encodedString) {
 // --- PLAYWRIGHT BROWSER INSTANCE ---
 // Khởi tạo một biến để giữ instance của trình duyệt
 let browserInstance;
+let browserContext; // Biến để giữ context
 
 // Hàm để khởi tạo hoặc lấy lại instance của trình duyệt
 async function getBrowser() {
-    if (!browserInstance) {
-        console.log("Khởi tạo Playwright browser instance...");
+    // Nếu trình duyệt không kết nối được (bị treo/lỗi), khởi tạo lại
+    if (!browserInstance || !browserInstance.isConnected()) {
+        console.log("Khởi tạo hoặc khởi động lại Playwright browser instance...");
         browserInstance = await firefox.launch({
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
         });
-        console.log("Browser instance (Firefox) đã được khởi tạo.");
+        browserContext = await browserInstance.newContext({
+            // Giả lập thông số của một trình duyệt người dùng thật
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
+            viewport: { width: 1920, height: 1080 },
+            locale: 'vi-VN,vi;q=0.9,fr-FR;q=0.8,fr;q=0.7,en-US;q=0.6,en;q=0.5',
+            timezoneId: 'Asia/Ho_Chi_Minh',
+            geolocation: { latitude: 21.028511, longitude: 105.804817 }, // Tọa độ Hà Nội
+            permissions: ['geolocation']
+        });
+        console.log("Browser và Context đã được khởi tạo.");
     }
-    return browserInstance;
+    // Trả về context để tái sử dụng
+    return browserContext;
 }
 
 // --- 1. API LẤY NỘI DUNG TRUYỆN ---
@@ -66,19 +78,9 @@ app.get('/api/speak', async (req, res) => {
 
     let page; // Khai báo page ở ngoài để có thể đóng trong khối finally
     try {
-        // Lấy instance trình duyệt đã được khởi tạo
-        const browser = await getBrowser();
-        const context = await browser.newContext({
-            // Giả lập thông số của một trình duyệt người dùng thật
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
-            viewport: { width: 1920, height: 1080 },
-            locale: 'vi-VN,vi;q=0.9,fr-FR;q=0.8,fr;q=0.7,en-US;q=0.6,en;q=0.5',
-            timezoneId: 'Asia/Ho_Chi_Minh',
-            geolocation: { latitude: 21.028511, longitude: 105.804817 }, // Tọa độ Hà Nội
-            permissions: ['geolocation']
-        });
+        // Lấy context đã được khởi tạo để tái sử dụng
+        const context = await getBrowser();
         page = await context.newPage();
-
         // --- TỐI ƯU HÓA: Chặn các tài nguyên không cần thiết để tiết kiệm RAM và tăng tốc ---
         await page.route('**/*', (route) => {
             const resourceType = route.request().resourceType();
