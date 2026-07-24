@@ -4,8 +4,8 @@ FROM node:20
 # Thiết lập thư mục làm việc bên trong container
 WORKDIR /app
 
-# Sao chép file package.json và package-lock.json vào thư mục làm việc
-COPY package*.json ./
+# Sao chép các file quản lý dependency
+COPY package.json package-lock.json ./
 
 # Chạy lệnh "npm install" và "npx playwright install" (thông qua postinstall)
 # Lệnh này sẽ cài đặt tất cả dependencies và trình duyệt Chromium
