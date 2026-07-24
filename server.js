@@ -70,6 +70,9 @@ app.get('/api/speak', async (req, res) => {
 
         const $ = cheerio.load(response.body);
 
+        console.log($.text());
+        
+
         const nextElement = $('div.nav-next a');
         let nextLink = nextElement.attr('href');
 
