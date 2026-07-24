@@ -72,10 +72,25 @@ app.get('/api/speak', async (req, res) => {
         });
         page = await context.newPage();
 
+        // --- TỐI ƯU HÓA: Chặn các tài nguyên không cần thiết để tiết kiệm RAM và tăng tốc ---
+        await page.route('**/*', (route) => {
+            const resourceType = route.request().resourceType();
+            if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
+                route.abort();
+            } else {
+                route.continue();
+            }
+        });
+
         console.log(`Đang tải trang bằng Playwright: ${url}`);
-        // Tăng thời gian chờ lên 60 giây để Playwright có đủ thời gian giải quyết Cloudflare
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 }); // Tăng timeout lên 90s cho chắc chắn
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
         console.log("Tải trang thành công.");
+
+        // --- CHỜ ĐỢI THÔNG MINH: Chờ cho đến khi phần tử nội dung truyện thực sự xuất hiện ---
+        // Đây là cách chắc chắn nhất để biết đã vượt qua Cloudflare
+        console.log("Đang chờ selector nội dung truyện ('#chapter-reading-content' hoặc 'script:contains(\"data_x\")')...");
+        await page.waitForSelector('#chapter-reading-content, script:contains("const data_x")', { timeout: 60000 });
+        console.log("Selector đã xuất hiện! Đã vượt qua Cloudflare.");
 
         // Lấy nội dung HTML sau khi trang đã tải xong
         const body = await page.content();
@@ -132,7 +147,12 @@ app.get('/api/speak', async (req, res) => {
 
     } catch (error) {
         console.error("--- LỖI TRONG QUÁ TRÌNH SCRAPING ---");
-        console.error("Lỗi chi tiết:", error); // In ra toàn bộ lỗi để dễ debug
+        // Nếu là lỗi timeout, cung cấp thông báo rõ ràng hơn
+        if (error.name === 'TimeoutError') {
+            console.error("Lỗi TimeoutError: Playwright đã không thể tìm thấy selector nội dung trong thời gian cho phép. Rất có thể vẫn bị Cloudflare chặn.");
+        } else {
+            console.error("Lỗi chi tiết:", error); // In ra toàn bộ lỗi để dễ debug
+        }
         res.status(500).json({ error: "Lỗi tải trang truyện bằng Playwright. " + error.message });
     } finally {
         // Đảm bảo page luôn được đóng dù có lỗi hay không
