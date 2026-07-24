@@ -70,7 +70,7 @@ app.get('/api/speak', async (req, res) => {
 
         const $ = cheerio.load(response.body);
 
-        console.log($.text());
+        
         
 
         const nextElement = $('div.nav-next a');
@@ -89,7 +89,12 @@ app.get('/api/speak', async (req, res) => {
 
         if (match && match[1]) {
             const encodedContent = match[1];
+
+            console.log(encodedContent);
+
             const decodedHtml = decodeContent(encodedContent);
+
+            console.log(decodedHtml);
 
             // Dùng Cheerio để phân tích HTML đã giải mã
             const $content = cheerio.load(decodedHtml);
