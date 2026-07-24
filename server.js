@@ -4,7 +4,11 @@ const cheerio = require('cheerio');
 const googleTTS = require('google-tts-api');
 const pako = require('pako');
 const path = require('path');
-const { firefox } = require('playwright-firefox');
+
+// SỬA: Chuyển sang dùng chromium vì plugin stealth chỉ hỗ trợ tốt nhân này
+const { chromium } = require('playwright-extra');
+const stealth = require('puppeteer-extra-plugin-stealth')();
+chromium.use(stealth);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,13 +21,7 @@ app.get('/', (req, res) => {
 
 const googleHosts = [
     'https://translate.google.com',
-    'https://translate.google.com.vn',
-    'https://translate.google.co.jp',
-    'https://translate.google.fr',
-    'https://translate.google.de',
-    'https://translate.google.ru',
-    'https://translate.google.com.br',
-    'https://translate.google.co.in'
+    'https://translate.google.com.vn'
 ];
 
 // --- HÀM GIẢI MÃ DATA_X ---
@@ -39,42 +37,30 @@ function decodeContent(encodedString) {
 
     const binaryData = Uint8Array.from(atob(base64String), c => c.charCodeAt(0));
     const decompressedData = pako.inflate(binaryData);
-    const decodedHtml = new TextDecoder().decode(decompressedData);
-    return decodedHtml;
+    return new TextDecoder().decode(decompressedData);
 }
 
 // --- PLAYWRIGHT BROWSER INSTANCE ---
-// Khởi tạo một biến để giữ instance của trình duyệt
 let browserInstance;
-let browserContext; // Biến để giữ context
 
-// Hàm để khởi tạo hoặc lấy lại instance của trình duyệt
+// Hàm này CHỈ giữ vai trò quản lý lõi trình duyệt (Giúp tiết kiệm RAM tối đa)
 async function getBrowser() {
-    // Nếu trình duyệt không kết nối được (bị treo/lỗi), khởi tạo lại
     if (!browserInstance || !browserInstance.isConnected()) {
-        console.log("Khởi tạo hoặc khởi động lại Playwright browser instance...");
-        browserInstance = await firefox.launch({
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
-            // Thêm các biến môi trường để tắt các tính năng sandbox của Firefox
-            // đang gây crash trên môi trường container bị giới hạn.
-            env: {
-                ...process.env,
-                MOZ_DISABLE_CONTENT_SANDBOX: '1',
-            }
+        console.log("Khởi tạo hoặc khởi động lại Playwright Chromium instance...");
+        browserInstance = await chromium.launch({
+            headless: true,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process' // Rất quan trọng để tối ưu tài nguyên trên Onrender Free
+            ]
         });
-        browserContext = await browserInstance.newContext({
-            // Giả lập thông số của một trình duyệt người dùng thật
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
-            viewport: { width: 1920, height: 1080 },
-            locale: 'vi-VN,vi;q=0.9,fr-FR;q=0.8,fr;q=0.7,en-US;q=0.6,en;q=0.5',
-            timezoneId: 'Asia/Ho_Chi_Minh',
-            geolocation: { latitude: 21.028511, longitude: 105.804817 }, // Tọa độ Hà Nội
-            permissions: ['geolocation']
-        });
-        console.log("Browser và Context đã được khởi tạo với thông số giả lập.");
     }
-    // Trả về context để tái sử dụng
-    return browserContext;
+    return browserInstance;
 }
 
 // --- 1. API LẤY NỘI DUNG TRUYỆN ---
@@ -82,29 +68,38 @@ app.get('/api/speak', async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Thiếu URL' });
 
-    let page; // Khai báo page ở ngoài để có thể đóng trong khối finally
+    let context;
+    let page;
+
     try {
-        // Lấy context đã được khởi tạo để tái sử dụng
-        const context = await getBrowser();
-        console.log("bắt đâu tải trang bằng Playwright.");
+        const browser = await getBrowser();
+
+        // 💡 BÍ QUYẾT: Tạo một Context mới hoàn toàn độc lập cho mỗi Request
+        // Việc này giúp xóa sạch session/cookie cũ, tránh bị Cloudflare chặn dây chuyền
+        context = await browser.newContext({
+            // Không điền cứng User-Agent cũ, hãy để Stealth tự tạo cấu trúc khớp với Chromium chạy ngầm
+            viewport: { width: 1280, height: 800 },
+            locale: 'vi-VN',
+            timezoneId: 'Asia/Ho_Chi_Minh'
+        });
+
+        console.log("Mở tab mới trong Playwright...");
         page = await context.newPage();
 
-        console.log(`Đang tải trang bằng Playwright: ${url}`);
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
-        console.log("Tải trang thành công.");
+        console.log(`Đang tải trang: ${url}`);
+        // Chờ trang tải xong phần cơ bản
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-        // Lấy nội dung HTML sau khi trang đã tải xong
+        // 💡 QUAN TRỌNG: Đợi 4-5 giây để Cloudflare tự chạy ngầm đoạn mã JavaScript thử thách
+        console.log("Đang đợi Cloudflare xác thực ẩn...");
+        await page.waitForTimeout(4500);
+
+        // Lấy nội dung HTML đã gỡ Cloudflare thành công
         const body = await page.content();
-        console.log(body);
-        
-        console.log(`Lấy nội dung HTML thành công, độ dài: ${body.length}`);
+        console.log(`Tải HTML thành công, độ dài: ${body.length}`);
 
-        // Không đóng browser, chỉ đóng page
-        await page.close();
-        console.log("Đã đóng page Playwright.");
-
+        // Nạp HTML vào Cheerio để bóc tách
         const $ = cheerio.load(body);
-
         let content = "";
 
         // Ưu tiên tìm data_x để giải mã trước
@@ -114,22 +109,23 @@ app.get('/api/speak', async (req, res) => {
         if (match && match[1]) {
             console.log("Tìm thấy data_x. Bắt đầu giải mã...");
             const encodedContent = match[1];
-            const decodedHtml = decodeContent(encodedContent); // Hàm giải mã bạn đã có
+            const decodedHtml = decodeContent(encodedContent);
 
             const $content = cheerio.load(decodedHtml);
-            // Thêm dấu chấm sau mỗi thẻ <br> và <p> để ngắt nghỉ khi đọc
             $content('br').replaceWith('. ');
             $content('p').append('. ');
 
             content = $content.text();
             console.log("Giải mã thành công data_x!");
         } else {
-            console.log("Không tìm thấy data_x, sử dụng phương pháp cũ.");
+            console.log("Không tìm thấy data_x, thử cào text hiển thị trực tiếp.");
             const chapterDiv = $('#chapter-reading-content');
-            chapterDiv.find('p').each((i, el) => {
-                $(el).append('. ');
-            });
-            content = chapterDiv.text();
+            if (chapterDiv.length) {
+                chapterDiv.find('p').each((i, el) => {
+                    $(el).append('. ');
+                });
+                content = chapterDiv.text();
+            }
         }
 
         if (content) {
@@ -140,7 +136,6 @@ app.get('/api/speak', async (req, res) => {
                 .trim();
         }
 
-        // Lấy link chương tiếp theo
         const nextElement = $('div.nav-next a');
         let nextLink = nextElement.attr('href');
         if (nextLink && !nextLink.startsWith('http')) {
@@ -150,19 +145,13 @@ app.get('/api/speak', async (req, res) => {
         res.json({ content, nextLink });
 
     } catch (error) {
-        console.error("--- LỖI TRONG QUÁ TRÌNH SCRAPING ---");
-        // Nếu là lỗi timeout, cung cấp thông báo rõ ràng hơn
-        if (error.name === 'TimeoutError') {
-            console.error("Lỗi TimeoutError: Playwright đã không thể tìm thấy selector nội dung trong thời gian cho phép. Rất có thể vẫn bị Cloudflare chặn.");
-        } else {
-            console.error("Lỗi chi tiết:", error); // In ra toàn bộ lỗi để dễ debug
-        }
-        res.status(500).json({ error: "Lỗi tải trang truyện bằng Playwright. " + error.message });
+        console.error("--- LỖI QUÁ TRÌNH CÀO TRUYỆN ---", error.message);
+        res.status(500).json({ error: "Lỗi tải trang truyện: " + error.message });
     } finally {
-        // Đảm bảo page luôn được đóng dù có lỗi hay không
-        if (page && !page.isClosed()) {
-            await page.close();
-        }
+        // 🚨 CHÚ Ý: Đóng cả page và context để giải phóng RAM triệt để cho Onrender
+        if (page && !page.isClosed()) await page.close();
+        if (context) await context.close();
+        console.log("Đã đóng sạch sẽ session request.");
     }
 });
 
@@ -204,12 +193,12 @@ app.get('/api/tts', async (req, res) => {
     }
 });
 
-// Khởi động server sau khi đã khởi tạo trình duyệt lần đầu
+// Khởi động server
 getBrowser().then(() => {
     app.listen(PORT, () => {
-        console.log(`Server chạy tại: http://localhost:${PORT}`);
+        console.log(`Server khởi động thành công trên cổng: ${PORT}`);
     });
 }).catch(error => {
-    console.error("Không thể khởi tạo trình duyệt Playwright!", error);
+    console.error("Không thể khởi động trình duyệt gốc!", error);
     process.exit(1);
 });
