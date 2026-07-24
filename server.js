@@ -97,7 +97,7 @@ app.get('/api/speak', async (req, res) => {
 
         // 💡 QUAN TRỌNG: Đợi 4-5 giây để Cloudflare tự chạy ngầm đoạn mã JavaScript thử thách
         console.log("Đang đợi Cloudflare xác thực ẩn...");
-        await page.waitForTimeout(99999);
+        await page.waitForTimeout(5000);
 
         // Lấy nội dung HTML đã gỡ Cloudflare thành công
         const body = await page.content();
