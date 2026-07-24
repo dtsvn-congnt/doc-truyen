@@ -45,23 +45,36 @@ let browserInstance;
 
 // Hàm này CHỈ giữ vai trò quản lý lõi trình duyệt (Giúp tiết kiệm RAM tối đa)
 async function getBrowser() {
-    // Kiểm tra xem instance cũ còn sống không, nếu không thì tạo mới
     if (!browserInstance || !browserInstance.isConnected()) {
-        console.log("Khởi tạo tiến trình Chromium siêu nhẹ...");
+        console.log("Khởi tạo tiến trình Chromium tối ưu hóa Cloudflare Turnstile...");
+        
+        const { chromium } = require('playwright-extra');
+        const stealth = require('puppeteer-extra-plugin-stealth')();
+        chromium.use(stealth);
 
         browserInstance = await chromium.launch({
             headless: true,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage', // Ép sử dụng bộ nhớ /tmp thay vì /dev/shm (Tránh crash trên Docker)
+                '--disable-dev-shm-usage',
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
                 '--no-zygote',
-                '--single-process',       // Chạy tất cả các tab trên cùng 1 luồng để tiết kiệm RAM tối đa
-                '--disable-gpu',           // Tắt card đồ họa ảo
-                '--disable-extensions',    // Tắt các tiện ích mở rộng ngầm
-                '--js-flags="--max-old-space-size=128"' // Giới hạn bộ nhớ JavaScript của V8 Engine
+                '--single-process',
+                
+                // 💡 XỬ LÝ LỖI "No available adapters":
+                // Bỏ --disable-gpu, thay bằng ép sử dụng card đồ họa ảo bằng phần mềm (SwiftShader)
+                // giúp vượt qua bài kiểm tra WebGL fingerprint của Cloudflare Turnstile
+                '--use-gl=angle',
+                '--use-angle=swiftshader', 
+                
+                // 💡 XỬ LÝ LỖI "ERR_ADDRESS_UNREACHABLE":
+                // Khóa chặt các tính năng dò mạng WebRTC/P2P vốn bị lỗi trên hệ thống mạng của Onrender
+                '--disable-webrtc',
+                '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+                
+                '--js-flags="--max-old-space-size=128"'
             ]
         });
     }
