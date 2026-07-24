@@ -101,6 +101,8 @@ app.get('/api/speak', async (req, res) => {
 
         // Lấy nội dung HTML đã gỡ Cloudflare thành công
         const body = await page.content();
+        console.log(body);
+        
         console.log(`Tải HTML thành công, độ dài: ${body.length}`);
 
         // Nạp HTML vào Cheerio để bóc tách
