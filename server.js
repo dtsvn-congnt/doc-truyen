@@ -4,9 +4,7 @@ const cheerio = require('cheerio');
 const googleTTS = require('google-tts-api');
 const pako = require('pako');
 const path = require('path');
-// Nâng cấp lên playwright-extra và stealth plugin để bypass Cloudflare
-const { chromium } = require('playwright-extra');
-const stealth = require('playwright-extra-plugin-stealth')();
+const { firefox } = require('playwright-firefox');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -52,14 +50,11 @@ let browserInstance;
 // Hàm để khởi tạo hoặc lấy lại instance của trình duyệt
 async function getBrowser() {
     if (!browserInstance) {
-        // Áp dụng plugin stealth
-        chromium.use(stealth);
         console.log("Khởi tạo Playwright browser instance...");
-        browserInstance = await chromium.launch({
-            // Thêm các đối số để trông giống trình duyệt thật hơn
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-infobars', '--window-position=0,0', '--ignore-certifcate-errors', '--ignore-certifcate-errors-spki-list'],
+        browserInstance = await firefox.launch({
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
         });
-        console.log("Browser instance đã được khởi tạo với stealth mode.");
+        console.log("Browser instance (Firefox) đã được khởi tạo.");
     }
     return browserInstance;
 }
@@ -75,7 +70,7 @@ app.get('/api/speak', async (req, res) => {
         const browser = await getBrowser();
         const context = await browser.newContext({
             // Giả lập thông số của một trình duyệt người dùng thật
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
             viewport: { width: 1920, height: 1080 },
             locale: 'vi-VN,vi;q=0.9,fr-FR;q=0.8,fr;q=0.7,en-US;q=0.6,en;q=0.5',
             timezoneId: 'Asia/Ho_Chi_Minh',

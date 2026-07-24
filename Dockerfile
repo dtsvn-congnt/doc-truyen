@@ -4,11 +4,10 @@ FROM node:20
 # Thiết lập thư mục làm việc bên trong container
 WORKDIR /app
 
-# Sao chép các file quản lý dependency của Yarn
-COPY package.json yarn.lock ./
+# Chỉ sao chép package.json để buộc cài đặt mới
+COPY package.json ./
 
-# Chạy lệnh "yarn install" để cài đặt dependencies một cách đáng tin cậy
-RUN yarn install --frozen-lockfile
+RUN npm install
 
 # Sao chép toàn bộ mã nguồn còn lại của ứng dụng vào thư mục làm việc
 COPY . .
