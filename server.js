@@ -80,6 +80,7 @@ app.get('/api/speak', async (req, res) => {
     try {
         // Lấy context đã được khởi tạo để tái sử dụng
         const context = await getBrowser();
+        console.log("bắt đâu tải trang bằng Playwright.");
         page = await context.newPage();
 
         console.log(`Đang tải trang bằng Playwright: ${url}`);
