@@ -4,14 +4,11 @@ FROM node:20
 # Thiết lập thư mục làm việc bên trong container
 WORKDIR /app
 
-# Chỉ sao chép package.json để buộc cài đặt mới
-COPY package.json ./
+# Sao chép các file quản lý dependency của Yarn
+COPY package.json yarn.lock ./
 
-# Chạy lệnh "npm install" và "npx playwright install" (thông qua postinstall)
-# Lệnh này sẽ cài đặt tất cả dependencies và trình duyệt Chromium
-RUN npm config set registry https://registry.npmjs.org/ && \
-    npm cache clean --force && \
-    npm install
+# Chạy lệnh "yarn install" để cài đặt dependencies một cách đáng tin cậy
+RUN yarn install --frozen-lockfile
 
 # Sao chép toàn bộ mã nguồn còn lại của ứng dụng vào thư mục làm việc
 COPY . .
