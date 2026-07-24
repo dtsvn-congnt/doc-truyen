@@ -48,10 +48,6 @@ async function getBrowser() {
     // Kiểm tra xem instance cũ còn sống không, nếu không thì tạo mới
     if (!browserInstance || !browserInstance.isConnected()) {
         console.log("Khởi tạo tiến trình Chromium siêu nhẹ...");
-        
-        const { chromium } = require('playwright-extra');
-        const stealth = require('puppeteer-extra-plugin-stealth')();
-        chromium.use(stealth);
 
         browserInstance = await chromium.launch({
             headless: true,

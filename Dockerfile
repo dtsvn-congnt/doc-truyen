@@ -1,5 +1,5 @@
 # Sử dụng image chính thức của Playwright, đã cài sẵn trình duyệt và dependencies
-FROM mcr.microsoft.com/playwright:v1.45.0-jammy
+FROM mcr.microsoft.com/playwright:v1.61.1-jammy
 
 # Thiết lập thư mục làm việc bên trong container
 WORKDIR /app
