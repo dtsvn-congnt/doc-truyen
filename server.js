@@ -55,6 +55,12 @@ async function getBrowser() {
         console.log("Khởi tạo hoặc khởi động lại Playwright browser instance...");
         browserInstance = await firefox.launch({
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            // Thêm các biến môi trường để tắt các tính năng sandbox của Firefox
+            // đang gây crash trên môi trường container bị giới hạn.
+            env: {
+                ...process.env,
+                MOZ_DISABLE_CONTENT_SANDBOX: '1',
+            }
         });
         browserContext = await browserInstance.newContext({
             // Giả lập thông số của một trình duyệt người dùng thật
