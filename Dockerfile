@@ -1,5 +1,5 @@
 # Sử dụng image Node.js chính thức phiên bản 20 làm nền
-FROM node:20-slim
+FROM node:20
 
 # Thiết lập thư mục làm việc bên trong container
 WORKDIR /app
