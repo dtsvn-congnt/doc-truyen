@@ -85,6 +85,9 @@ app.get('/api/speak', async (req, res) => {
 
         // Thử lấy nội dung từ data_x trước
         const scriptContent = $('script:contains("const data_x")').html();
+
+        console.log(scriptContent);
+        
         const match = scriptContent ? scriptContent.match(/const data_x\s*=\s*['"]([^'"]+)['"]\s*;/) : null;
 
         if (match && match[1]) {
