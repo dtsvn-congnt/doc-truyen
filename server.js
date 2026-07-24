@@ -4,6 +4,7 @@ const cheerio = require('cheerio');
 const googleTTS = require('google-tts-api');
 const pako = require('pako');
 const path = require('path');
+const { chromium } = require('playwright');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -36,15 +37,8 @@ function decodeContent(encodedString) {
         base64String += (idx > -1) ? s[idx] : char;
     }
 
-    // Sử dụng atob (có sẵn trong Node.js v16+)
-    // Hoặc dùng Buffer cho các phiên bản cũ hơn:
-    // const binaryData = Buffer.from(base64String, 'base64');
     const binaryData = Uint8Array.from(atob(base64String), c => c.charCodeAt(0));
-
-    // Giải nén bằng Pako để có Uint8Array
     const decompressedData = pako.inflate(binaryData);
-    
-    // Chuyển Uint8Array thành chuỗi text UTF-8
     const decodedHtml = new TextDecoder().decode(decompressedData);
     return decodedHtml;
 }
@@ -55,29 +49,26 @@ app.get('/api/speak', async (req, res) => {
     if (!url) return res.status(400).json({ error: 'Thiếu URL' });
 
     try {
-        // Import động got-scraping (nếu xài module ES trong CommonJS)
-        const { gotScraping } = await import('got-scraping');
-        
-            //         headerGeneratorOptions: {
-            //     browsers: [{ name: 'chrome', minVersion: 110 }],
-            //     devices: ['desktop'],
-            //     locales: ['vi-VN'],
-            //     operatingSystems: ['windows'],
-            // }
-        const response = await gotScraping({
-            url: url
-
-            ,headers: {
-                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
-                'cookie': 'wpmanga-reading-history=W3siaWQiOjEwODY5NDc0LCJjIjoiMTA0NTU2ODMiLCJwIjoxLCJpIjoiIiwidCI6MTc4NDkxNzczMH1d; g_state={"i_l":0,"i_ll":1784892561794,"i_b":"e7E/TM7yImFtuCE4O5weMLfQ3b2OrAUxOVQ6urWA2MU","i_e":{"enable_itp_optimization":24},"i_et":1784892561794}'
-            }
-            
+        // Sử dụng Playwright để lấy nội dung trang, giải pháp triệt để cho Cloudflare
+        const browser = await chromium.launch({
+            // Thêm đối số này để chạy tốt trong môi trường Docker
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
         });
+        const context = await browser.newContext({
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+        });
+        const page = await context.newPage();
 
-        const $ = cheerio.load(response.body);
+        console.log(`Đang tải trang bằng Playwright: ${url}`);
+        // Tăng thời gian chờ lên 60 giây để Playwright có đủ thời gian giải quyết Cloudflare
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-        
-        
+        // Lấy nội dung HTML sau khi trang đã tải xong
+        const body = await page.content();
+
+        await browser.close();
+
+        const $ = cheerio.load(body);
 
         const nextElement = $('div.nav-next a');
         let nextLink = nextElement.attr('href');
@@ -89,32 +80,21 @@ app.get('/api/speak', async (req, res) => {
         const chapterDiv = $('#chapter-reading-content');
         let content = "";
 
-        // Thử lấy nội dung từ data_x trước
+        // Tìm data_x để giải mã
         const scriptContent = $('script:contains("const data_x")').html();
-
-        console.log(scriptContent);
-        
         const match = scriptContent ? scriptContent.match(/const data_x\s*=\s*['"]([^'"]+)['"]\s*;/) : null;
 
         if (match && match[1]) {
             const encodedContent = match[1];
-
-            console.log(encodedContent);
-
             const decodedHtml = decodeContent(encodedContent);
 
-            console.log(decodedHtml);
-
-            // Dùng Cheerio để phân tích HTML đã giải mã
             const $content = cheerio.load(decodedHtml);
-            
-            // Thay thế <br> và thêm dấu chấm vào cuối <p>
             $content('br').replaceWith('. ');
             $content('p').append('. ');
 
             content = $content.text();
+            console.log("Giải mã thành công data_x!");
         } else if (chapterDiv.length) {
-            // Nếu không có data_x, quay lại cách lấy thông thường
             console.log("Không tìm thấy data_x, sử dụng phương pháp cũ.");
             chapterDiv.find('p').each((i, el) => {
                 $(el).append('. ');
@@ -122,7 +102,6 @@ app.get('/api/speak', async (req, res) => {
             content = chapterDiv.text();
         }
 
-        // Nếu có nội dung, làm sạch nó
         if (content) {
              content = content
                 .replace(/\s+/g, ' ')
@@ -134,8 +113,8 @@ app.get('/api/speak', async (req, res) => {
         res.json({ content, nextLink });
 
     } catch (error) {
-        console.error("Lỗi lấy truyện:", error.message);
-        res.status(500).json({ error: "Lỗi tải trang truyện" });
+        console.error("Lỗi lấy truyện bằng Playwright:", error.message);
+        res.status(500).json({ error: "Lỗi tải trang truyện bằng Playwright. " + error.message });
     }
 });
 
