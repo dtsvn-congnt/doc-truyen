@@ -65,7 +65,7 @@ async function getBrowser() {
             geolocation: { latitude: 21.028511, longitude: 105.804817 }, // Tọa độ Hà Nội
             permissions: ['geolocation']
         });
-        console.log("Browser và Context đã được khởi tạo.");
+        console.log("Browser và Context đã được khởi tạo với thông số giả lập.");
     }
     // Trả về context để tái sử dụng
     return browserContext;
@@ -81,15 +81,6 @@ app.get('/api/speak', async (req, res) => {
         // Lấy context đã được khởi tạo để tái sử dụng
         const context = await getBrowser();
         page = await context.newPage();
-        // --- TỐI ƯU HÓA: Chặn các tài nguyên không cần thiết để tiết kiệm RAM và tăng tốc ---
-        await page.route('**/*', (route) => {
-            const resourceType = route.request().resourceType();
-            if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
-                route.abort();
-            } else {
-                route.continue();
-            }
-        });
 
         console.log(`Đang tải trang bằng Playwright: ${url}`);
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
