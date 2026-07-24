@@ -65,7 +65,11 @@ app.get('/api/speak', async (req, res) => {
                 devices: ['desktop'],
                 locales: ['vi-VN'],
                 operatingSystems: ['windows'],
-            },
+            },headers: {
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
+                'cookie': 'wpmanga-reading-history=W3siaWQiOjEwODY5NDc0LCJjIjoiMTA0NTU2ODMiLCJwIjoxLCJpIjoiIiwidCI6MTc4NDkxNzczMH1d; g_state={"i_l":0,"i_ll":1784892561794,"i_b":"e7E/TM7yImFtuCE4O5weMLfQ3b2OrAUxOVQ6urWA2MU","i_e":{"enable_itp_optimization":24},"i_et":1784892561794}'
+            }
+            
         });
 
         const $ = cheerio.load(response.body);
