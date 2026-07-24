@@ -55,7 +55,7 @@ app.get('/api/speak', async (req, res) => {
         
         let content = "";
 
-        const nextElement = $('button.btn-nav-chapter');
+        const nextElement = $('button.btn-nav-chapter:contains("Tiếp")');
         let nextLink = nextElement.closest('a').attr('href');
 
         // LƯU Ý QUAN TRỌNG: Cheerio lấy href gốc (VD: /chuong-2.html), 
