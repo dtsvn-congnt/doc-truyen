@@ -58,14 +58,16 @@ app.get('/api/speak', async (req, res) => {
         // Import động got-scraping (nếu xài module ES trong CommonJS)
         const { gotScraping } = await import('got-scraping');
         
+            //         headerGeneratorOptions: {
+            //     browsers: [{ name: 'chrome', minVersion: 110 }],
+            //     devices: ['desktop'],
+            //     locales: ['vi-VN'],
+            //     operatingSystems: ['windows'],
+            // }
         const response = await gotScraping({
-            url: url,
-            headerGeneratorOptions: {
-                browsers: [{ name: 'chrome', minVersion: 110 }],
-                devices: ['desktop'],
-                locales: ['vi-VN'],
-                operatingSystems: ['windows'],
-            },headers: {
+            url: url
+
+            ,headers: {
                 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
                 'cookie': 'wpmanga-reading-history=W3siaWQiOjEwODY5NDc0LCJjIjoiMTA0NTU2ODMiLCJwIjoxLCJpIjoiIiwidCI6MTc4NDkxNzczMH1d; g_state={"i_l":0,"i_ll":1784892561794,"i_b":"e7E/TM7yImFtuCE4O5weMLfQ3b2OrAUxOVQ6urWA2MU","i_e":{"enable_itp_optimization":24},"i_et":1784892561794}'
             }
