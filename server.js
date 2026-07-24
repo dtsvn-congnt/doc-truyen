@@ -95,6 +95,8 @@ app.get('/api/speak', async (req, res) => {
 
         // Lấy nội dung HTML sau khi trang đã tải xong
         const body = await page.content();
+        console.log(body);
+        
         console.log(`Lấy nội dung HTML thành công, độ dài: ${body.length}`);
 
         // Không đóng browser, chỉ đóng page
