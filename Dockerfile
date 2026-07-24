@@ -9,7 +9,7 @@ COPY package*.json ./
 
 # Chạy lệnh "npm install" và "npx playwright install" (thông qua postinstall)
 # Lệnh này sẽ cài đặt tất cả dependencies và trình duyệt Chromium
-RUN npm install
+RUN npm ci
 
 # Sao chép toàn bộ mã nguồn còn lại của ứng dụng vào thư mục làm việc
 COPY . .
