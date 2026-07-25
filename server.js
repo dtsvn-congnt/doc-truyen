@@ -2,13 +2,8 @@ const express = require('express');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const googleTTS = require('google-tts-api');
-const pako = require('pako');
 const path = require('path');
-
-// SỬA: Chuyển sang dùng chromium vì plugin stealth chỉ hỗ trợ tốt nhân này
-const { chromium } = require('playwright-extra');
-const stealth = require('puppeteer-extra-plugin-stealth')();
-chromium.use(stealth);
+const fs = require('fs').promises; // Thêm module 'fs' để đọc file
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,157 +16,86 @@ app.get('/', (req, res) => {
 
 const googleHosts = [
     'https://translate.google.com',
-    'https://translate.google.com.vn'
+    'https://translate.google.com.vn',
+    'https://translate.google.co.jp',
+    'https://translate.google.fr',
+    'https://translate.google.de',
+    'https://translate.google.ru',
+    'https://translate.google.com.br',
+    'https://translate.google.co.in'
 ];
 
-// --- HÀM GIẢI MÃ DATA_X ---
-function decodeContent(encodedString) {
-    const s = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-    const c = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_';
-
-    let base64String = '';
-    for (const char of encodedString) {
-        const idx = c.indexOf(char);
-        base64String += (idx > -1) ? s[idx] : char;
-    }
-
-    const binaryData = Uint8Array.from(atob(base64String), c => c.charCodeAt(0));
-    const decompressedData = pako.inflate(binaryData);
-    return new TextDecoder().decode(decompressedData);
-}
-
-// --- PLAYWRIGHT BROWSER INSTANCE ---
-let browserInstance;
-
-// Hàm này CHỈ giữ vai trò quản lý lõi trình duyệt (Giúp tiết kiệm RAM tối đa)
-async function getBrowser() {
-    if (!browserInstance || !browserInstance.isConnected()) {
-        console.log("Khởi tạo tiến trình Chromium tối ưu hóa Cloudflare Turnstile...");
-        
-        const { chromium } = require('playwright-extra');
-        const stealth = require('puppeteer-extra-plugin-stealth')();
-        chromium.use(stealth);
-
-        browserInstance = await chromium.launch({
-            headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--single-process',
-                
-                // 💡 XỬ LÝ LỖI "No available adapters":
-                // Bỏ --disable-gpu, thay bằng ép sử dụng card đồ họa ảo bằng phần mềm (SwiftShader)
-                // giúp vượt qua bài kiểm tra WebGL fingerprint của Cloudflare Turnstile
-                '--use-gl=angle',
-                '--use-angle=swiftshader', 
-                
-                // 💡 XỬ LÝ LỖI "ERR_ADDRESS_UNREACHABLE":
-                // Khóa chặt các tính năng dò mạng WebRTC/P2P vốn bị lỗi trên hệ thống mạng của Onrender
-                '--disable-webrtc',
-                '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
-                
-                '--js-flags="--max-old-space-size=128"'
-            ]
-        });
-    }
-    return browserInstance;
-}
-
-// --- 1. API LẤY NỘI DUNG TRUYỆN ---
+// --- 1. API LẤY NỘI DUNG TRUYỆN TỪ FILE LOCAL ---
 app.get('/api/speak', async (req, res) => {
-    const { url } = req.query;
-    if (!url) return res.status(400).json({ error: 'Thiếu URL' });
+    const { chapter } = req.query;
+    if (!chapter || isNaN(parseInt(chapter, 10))) {
+        return res.status(400).json({ error: 'Tham số "chapter" phải là một số.' });
+    }
 
-    let context;
-    let page;
+    const currentChapterNum = parseInt(chapter, 10);
+    // Định dạng số chương thành chuỗi 4 chữ số, có số 0 ở đầu (vd: 208 -> "0208")
+    const formatChapterString = (num) => num.toString().padStart(4, '0');
+    const chapterFileName = `chapter-${formatChapterString(currentChapterNum)}.html`;
 
     try {
-        const browser = await getBrowser();
+        // Giả định các file chapter nằm trong thư mục /data và có đuôi .html
+        const filePath = path.join(__dirname, 'data', chapterFileName);
 
-        // 💡 BÍ QUYẾT: Tạo một Context mới hoàn toàn độc lập cho mỗi Request
-        // Việc này giúp xóa sạch session/cookie cũ, tránh bị Cloudflare chặn dây chuyền
-        context = await browser.newContext({
-            // Không điền cứng User-Agent cũ, hãy để Stealth tự tạo cấu trúc khớp với Chromium chạy ngầm
-            viewport: { width: 1280, height: 800 },
-            locale: 'vi-VN',
-            timezoneId: 'Asia/Ho_Chi_Minh'
-        });
-
-        console.log("Mở tab mới trong Playwright...");
-        page = await context.newPage();
-
-        console.log(`Đang tải trang: ${url}`);
-        // Chờ trang tải xong phần cơ bản
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-
-        // 💡 QUAN TRỌNG: Đợi 4-5 giây để Cloudflare tự chạy ngầm đoạn mã JavaScript thử thách
-        console.log("Đang đợi Cloudflare xác thực ẩn...");
-        await page.waitForTimeout(5000);
-
-        // Lấy nội dung HTML đã gỡ Cloudflare thành công
-        const body = await page.content();
-        console.log(body);
-        
-        console.log(`Tải HTML thành công, độ dài: ${body.length}`);
+        console.log(`Đang đọc file: ${filePath}`);
+        const htmlContent = await fs.readFile(filePath, 'utf-8');
+        console.log(`Đọc file thành công, độ dài: ${htmlContent.length}`);
 
         // Nạp HTML vào Cheerio để bóc tách
-        const $ = cheerio.load(body);
+        const $ = cheerio.load(htmlContent);
         let content = "";
 
-        // Ưu tiên tìm data_x để giải mã trước
-        const scriptContent = $('script:contains("const data_x")').html();
-        const match = scriptContent ? scriptContent.match(/const data_x\s*=\s*['"]([^'"]+)['"]\s*;/) : null;
-
-        if (match && match[1]) {
-            console.log("Tìm thấy data_x. Bắt đầu giải mã...");
-            const encodedContent = match[1];
-            const decodedHtml = decodeContent(encodedContent);
-
-            const $content = cheerio.load(decodedHtml);
-            $content('br').replaceWith('. ');
-            $content('p').append('. ');
-
-            content = $content.text();
-            console.log("Giải mã thành công data_x!");
+        // Dựa trên cấu trúc file chapter-0383.html, nội dung nằm trong thẻ <div>
+        // và các đoạn văn cách nhau bởi <br>.
+        console.log("Đọc nội dung trực tiếp từ thẻ div...");
+        const contentDiv = $('div').first(); // Lấy thẻ div đầu tiên
+        if (contentDiv.length) {
+            // Thay thế các thẻ <br> bằng dấu chấm để tạo câu cho TTS
+            contentDiv.find('br').replaceWith('. ');
+            content = contentDiv.text();
         } else {
-            console.log("Không tìm thấy data_x, thử cào text hiển thị trực tiếp.");
-            const chapterDiv = $('#chapter-reading-content');
-            if (chapterDiv.length) {
-                chapterDiv.find('p').each((i, el) => {
-                    $(el).append('. ');
-                });
-                content = chapterDiv.text();
-            }
+            // Dự phòng nếu file không có thẻ div, đọc toàn bộ body
+            $('body').find('br').replaceWith('. ');
+            content = $('body').text();
         }
 
         if (content) {
-             content = content
+            content = content
                 .replace(/\s+/g, ' ')
                 .replace(/\.(\s*\.)+/g, '.')
                 .replace(/([”"'])\./g, '$1')
                 .trim();
         }
 
-        const nextElement = $('div.nav-next a');
-        let nextLink = nextElement.attr('href');
-        if (nextLink && !nextLink.startsWith('http')) {
-            nextLink = new URL(nextLink, url).href;
+        // --- LOGIC MỚI: TÌM CHƯƠNG TIẾP THEO BẰNG CÁCH KIỂM TRA FILE ---
+        let nextLink = null;
+        const nextChapterNum = currentChapterNum + 1;
+        const nextChapterFileName = `chapter-${formatChapterString(nextChapterNum)}.html`;
+        const nextFilePath = path.join(__dirname, 'data', nextChapterFileName);
+
+        try {
+            // Kiểm tra xem file của chương tiếp theo có tồn tại không
+            await fs.access(nextFilePath);
+            // Nếu không có lỗi, file tồn tại -> trả về số của chương tiếp theo
+            nextLink = nextChapterNum.toString();
+            console.log(`Tìm thấy chương tiếp theo: ${nextChapterFileName}`);
+        } catch (e) {
+            // Nếu có lỗi (ENOENT), file không tồn tại
+            console.log(`Không tìm thấy chương tiếp theo: ${nextChapterFileName}`);
         }
 
         res.json({ content, nextLink });
-
     } catch (error) {
-        console.error("--- LỖI QUÁ TRÌNH CÀO TRUYỆN ---", error.message);
-        res.status(500).json({ error: "Lỗi tải trang truyện: " + error.message });
-    } finally {
-        // 🚨 CHÚ Ý: Đóng cả page và context để giải phóng RAM triệt để cho Onrender
-        if (page && !page.isClosed()) await page.close();
-        if (context) await context.close();
-        console.log("Đã đóng sạch sẽ session request.");
+        console.error("--- LỖI QUÁ TRÌNH ĐỌC FILE TRUYỆN ---", error.message);
+        if (error.code === 'ENOENT') {
+            res.status(404).json({ error: `Không tìm thấy file chapter: ${chapterFileName}` });
+        } else {
+            res.status(500).json({ error: "Lỗi đọc file truyện: " + error.message });
+        }
     }
 });
 
@@ -214,11 +138,6 @@ app.get('/api/tts', async (req, res) => {
 });
 
 // Khởi động server
-getBrowser().then(() => {
-    app.listen(PORT, () => {
-        console.log(`Server khởi động thành công trên cổng: ${PORT}`);
-    });
-}).catch(error => {
-    console.error("Không thể khởi động trình duyệt gốc!", error);
-    process.exit(1);
+app.listen(PORT, () => {
+    console.log(`Server khởi động thành công trên cổng: ${PORT}`);
 });
