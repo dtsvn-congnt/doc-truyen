@@ -50,7 +50,7 @@
             <button onclick="toggleTheme()" class="btn-theme" id="themeBtn">🌙 Tối</button>
         </div>
         
-        <input type="text" id="urlInput" placeholder="Dán link chapter truyện...">
+        <input type="text" id="urlInput" placeholder="Nhập số chương (vd: 208)">
         
         <div class="control-group">
             <button onclick="manualSeek(-1)" class="btn-gray">⏪ Lùi</button>
@@ -84,7 +84,7 @@
             <span style="font-size: 14px; font-weight: bold; color: var(--text-main);">Online (Google Proxy)</span>
         </div>
 
-        <button onclick="goToNext()" id="btnNext" class="btn-green" disabled>⏭ CHƯA CÓ LINK SAU</button>
+        <button onclick="goToNext()" id="btnNext" class="btn-green" disabled>⏭ HẾT CHƯƠNG</button>
         <input type="hidden" id="nextUrlHidden">
         
         <div style="margin-top: 15px; font-size: 14px;">
@@ -251,10 +251,10 @@
 
         async function handlePlayButton() {
             unlockAudio(); requestWakeLock();
-            const url = urlInput.value;
-            if (!url) { alert("Thiếu Link!"); return; }
+            const chapterName = urlInput.value;
+            if (!chapterName) { alert("Vui lòng nhập số chương!"); return; }
             if (state.dataLoaded && !state.isReading) { state.isReading = true; playNextSentence(); return; }
-            if (!state.dataLoaded) await fetchAndStart(url);
+            if (!state.dataLoaded) await fetchAndStart(chapterName);
         }
 
         function handleStopButton() {
@@ -282,10 +282,10 @@
             state.isReading = true; unlockAudio(); playNextSentence();
         }
 
-        async function fetchAndStart(url) {
+        async function fetchAndStart(chapterName) {
             handleStopButton(); btnStart.disabled = true; statusLog.innerText = "⏳ Đang tải...";
             try {
-                const response = await fetch(`/api/speak?url=${encodeURIComponent(url)}`);
+                const response = await fetch(`/api/speak?chapter=${encodeURIComponent(chapterName)}`);
                 const data = await response.json();
                 state.sentences = processContent(data.content);
                 if (state.sentences.length === 0) throw new Error("Không có nội dung");
@@ -295,17 +295,17 @@
                 
                 // LOGIC NÚT CHUYỂN TẬP
                 if (data.nextLink) { 
-                    nextUrlInput.value = data.nextLink; 
-                    btnNext.innerText = "⏭ CHƯƠNG SAU (Có sẵn)";
+                    nextUrlInput.value = data.nextLink; // data.nextLink là số chương tiếp theo, vd: "209"
+                    btnNext.innerText = `⏭ CHƯƠNG ${data.nextLink}`;
                     btnNext.disabled = false;
                 } else { 
                     nextUrlInput.value = ""; 
-                    btnNext.innerText = "⛔ KHÔNG CÓ LINK SAU";
+                    btnNext.innerText = "⏭ HẾT CHƯƠNG";
                     btnNext.disabled = true;
                 }
                 
                 btnStart.disabled = false; unlockAudio(); playNextSentence(); 
-            } catch (err) { readingBox.innerText = "❌ Lỗi: " + err.message; statusLog.innerText = "Lỗi tải trang."; btnStart.disabled = false; }
+            } catch (err) { readingBox.innerText = "❌ Lỗi: " + err.message; statusLog.innerText = "Lỗi tải chapter."; btnStart.disabled = false; }
         }
 
         function toggleTheme() {
@@ -323,7 +323,11 @@
         }
         function goToNext() {
             const nextLink = nextUrlInput.value;
-            if (nextLink) { state.dataLoaded = false; urlInput.value = nextLink; handlePlayButton(); }
+            if (nextLink) { 
+                urlInput.value = nextLink; 
+                // Gọi thẳng fetchAndStart để tải chapter mới, không cần qua handlePlayButton
+                fetchAndStart(nextLink); 
+            }
         }
     </script>
 </body>

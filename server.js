@@ -1,146 +1,143 @@
+const express = require('express');
+const axios = require('axios');
 const cheerio = require('cheerio');
-const pako = require('pako');
+const googleTTS = require('google-tts-api');
 const path = require('path');
-const fs = require('fs/promises');
+const fs = require('fs').promises; // Thêm module 'fs' để đọc file
 
-// --- HÀM GIẢI MÃ DATA_X ---
-function decodeContent(encodedString) {
-    const s = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-    const c = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_';
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-    let base64String = '';
-    for (const char of encodedString) {
-        const idx = c.indexOf(char);
-        base64String += (idx > -1) ? s[idx] : char;
+app.use(express.static(__dirname));
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+const googleHosts = [
+    'https://translate.google.com',
+    'https://translate.google.com.vn',
+    'https://translate.google.co.jp',
+    'https://translate.google.fr',
+    'https://translate.google.de',
+    'https://translate.google.ru',
+    'https://translate.google.com.br',
+    'https://translate.google.co.in'
+];
+
+// --- 1. API LẤY NỘI DUNG TRUYỆN TỪ FILE LOCAL ---
+app.get('/api/speak', async (req, res) => {
+    const { chapter } = req.query;
+    if (!chapter || isNaN(parseInt(chapter, 10))) {
+        return res.status(400).json({ error: 'Tham số "chapter" phải là một số.' });
     }
 
-    const binaryData = Uint8Array.from(atob(base64String), c => c.charCodeAt(0));
-
-    // Giải nén bằng Pako để có Uint8Array
-    const decompressedData = pako.inflate(binaryData);
-
-    // Chuyển Uint8Array thành chuỗi text UTF-8
-    const decodedHtml = new TextDecoder().decode(decompressedData);
-    return decodedHtml;
-}
-
-/**
- * Tải và lưu một chương truyện.
- * @param {string} url URL của chương
- * @param {number} chapterNumber Số thứ tự chương
- * @param {string} outputDir Thư mục lưu file
- * @returns {Promise<string|null>} URL của chương tiếp theo, hoặc null nếu kết thúc.
- */
-async function downloadChapter(url, chapterNumber, outputDir) {
-    if (!url) {
-        console.log('Không có URL chương, dừng lại.');
-        return null;
-    }
-
-    console.log(`Đang tải chương ${chapterNumber} từ: ${url}`);
+    const currentChapterNum = parseInt(chapter, 10);
+    // Định dạng số chương thành chuỗi 4 chữ số, có số 0 ở đầu (vd: 208 -> "0208")
+    const formatChapterString = (num) => num.toString().padStart(4, '0');
+    const chapterFileName = `chapter-${formatChapterString(currentChapterNum)}.html`;
 
     try {
-        // Sử dụng got-scraping để tải trang, giúp vượt qua các biện pháp chống cào dữ liệu
-        const { gotScraping } = await import('got-scraping');
+        // Giả định các file chapter nằm trong thư mục /data và có đuôi .html
+        const filePath = path.join(__dirname, 'data', chapterFileName);
 
-        const response = await gotScraping({
-            url: url,
-            headerGeneratorOptions: {
-                browsers: [{ name: 'chrome', minVersion: 110 }],
-                devices: ['desktop'],
-                locales: ['vi-VN'],
-                operatingSystems: ['windows'],
-            },
+        console.log(`Đang đọc file: ${filePath}`);
+        const htmlContent = await fs.readFile(filePath, 'utf-8');
+        console.log(`Đọc file thành công, độ dài: ${htmlContent.length}`);
+
+        // Nạp HTML vào Cheerio để bóc tách
+        const $ = cheerio.load(htmlContent);
+        let content = "";
+
+        // Dựa trên cấu trúc file chapter-0383.html, nội dung nằm trong thẻ <div>
+        // và các đoạn văn cách nhau bởi <br>.
+        console.log("Đọc nội dung trực tiếp từ thẻ div...");
+        const contentDiv = $('div').first(); // Lấy thẻ div đầu tiên
+        if (contentDiv.length) {
+            // Thay thế các thẻ <br> bằng dấu chấm để tạo câu cho TTS
+            contentDiv.find('br').replaceWith('. ');
+            content = contentDiv.text();
+        } else {
+            // Dự phòng nếu file không có thẻ div, đọc toàn bộ body
+            $('body').find('br').replaceWith('. ');
+            content = $('body').text();
+        }
+
+        if (content) {
+            content = content
+                .replace(/\s+/g, ' ')
+                .replace(/\.(\s*\.)+/g, '.')
+                .replace(/([”"'])\./g, '$1')
+                .trim();
+        }
+
+        // --- LOGIC MỚI: TÌM CHƯƠNG TIẾP THEO BẰNG CÁCH KIỂM TRA FILE ---
+        let nextLink = null;
+        const nextChapterNum = currentChapterNum + 1;
+        const nextChapterFileName = `chapter-${formatChapterString(nextChapterNum)}.html`;
+        const nextFilePath = path.join(__dirname, 'data', nextChapterFileName);
+
+        try {
+            // Kiểm tra xem file của chương tiếp theo có tồn tại không
+            await fs.access(nextFilePath);
+            // Nếu không có lỗi, file tồn tại -> trả về số của chương tiếp theo
+            nextLink = nextChapterNum.toString();
+            console.log(`Tìm thấy chương tiếp theo: ${nextChapterFileName}`);
+        } catch (e) {
+            // Nếu có lỗi (ENOENT), file không tồn tại
+            console.log(`Không tìm thấy chương tiếp theo: ${nextChapterFileName}`);
+        }
+
+        res.json({ content, nextLink });
+    } catch (error) {
+        console.error("--- LỖI QUÁ TRÌNH ĐỌC FILE TRUYỆN ---", error.message);
+        if (error.code === 'ENOENT') {
+            res.status(404).json({ error: `Không tìm thấy file chapter: ${chapterFileName}` });
+        } else {
+            res.status(500).json({ error: "Lỗi đọc file truyện: " + error.message });
+        }
+    }
+});
+
+// --- 2. API TRUNG GIAN TẢI MP3 (PROXY) ---
+app.get('/api/tts', async (req, res) => {
+    const { text } = req.query;
+    if (!text) return res.status(400).send('Thiếu text');
+
+    const randomHost = googleHosts[Math.floor(Math.random() * googleHosts.length)];
+
+    try {
+        const url = googleTTS.getAudioUrl(text, {
+            lang: 'vi',
+            slow: false,
+            host: randomHost,
+            splitPunctuation: true,
         });
 
-        const $ = cheerio.load(response.body);
+        const response = await axios({
+            method: 'get',
+            url: url,
+            responseType: 'stream',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                'Referer': randomHost
+            }
+        });
 
-        // Tìm link chương tiếp theo
-        const nextElement = $('div.nav-next a');
-        let nextLink = nextElement.attr('href');
-        if (nextLink && !nextLink.startsWith('http')) {
-            // Đảm bảo URL tiếp theo là URL tuyệt đối
-            const baseUrl = new URL(url);
-            nextLink = new URL(nextLink, baseUrl.origin).href;
-        }
+        res.set({
+            'Content-Type': 'audio/mpeg',
+            'Cache-Control': 'no-cache',
+        });
 
-        // Trích xuất nội dung được mã hóa từ biến data_x
-        // Thử lấy nội dung từ data_x trước
-        const scriptContent = $('script:contains("const data_x")').html();
-        const match = scriptContent ? scriptContent.match(/const data_x\s*=\s*['"]([^'"]+)['"]\s*;/) : null;
-
-        if (match && match[1]) {
-            const encodedContent = match[1];
-            const decodedHtml = decodeContent(encodedContent);
-
-            // Tạo tên file và đường dẫn đầy đủ
-            const fileName = `chapter-${String(chapterNumber).padStart(4, '0')}.html`;
-            const filePath = path.join(outputDir, fileName);
-
-            // Lưu nội dung đã giải mã vào file
-            await fs.writeFile(filePath, decodedHtml);
-            console.log(`Đã lưu thành công: ${filePath}`);
-        } else {
-            console.log(`Không tìm thấy nội dung (data_x) cho chương ${chapterNumber}. Bỏ qua.`);
-        }
-
-        return nextLink;
+        response.data.pipe(res);
 
     } catch (error) {
-        console.error(`Lỗi khi tải chương ${chapterNumber} (${url}):`, error.message);
-        // Dừng lại khi có lỗi
-        return null;
+        console.error("Lỗi TTS:", error.message);
+        res.status(500).send("Lỗi tạo giọng nói");
     }
-}
+});
 
-/**
- * Hàm chính để bắt đầu quá trình tải truyện.
- */
-async function main() {
-    // --- CẤU HÌNH ---
-    // URL của chương đầu tiên bạn muốn tải
-    const startUrl = 'https://www.xtruyen.vn/truyen/tu-tien-ta-that-khong-co-muon-lam-liem-cho/chuong-';
-
-    // Tên thư mục để lưu các file truyện
-    const storyFolderName = 'data';
-    // --- KẾT THÚC CẤU HÌNH ---
-
-    const outputDir = path.join(__dirname, storyFolderName);
-
-    // Tạo thư mục lưu truyện nếu nó chưa tồn tại
-    try {
-        await fs.mkdir(outputDir, { recursive: true });
-        console.log(`Các chương sẽ được lưu tại: ${outputDir}`);
-    } catch (error) {
-        console.error('Không thể tạo thư mục lưu trữ:', error);
-        return;
-    }
-    let chapterNumber = 758; // Bạn có thể thay đổi số chương bắt đầu nếu muốn tải tiếp
-
-    let currentUrl = startUrl + chapterNumber;
-    
-
-    
-    while (currentUrl) {
-        const nextUrl = await downloadChapter(currentUrl, chapterNumber, outputDir);
-
-        if (nextUrl) {
-            currentUrl = nextUrl;
-            chapterNumber++;
-            // Thêm một khoảng nghỉ nhỏ (ví dụ: 2 giây) để tránh làm quá tải server của trang web
-            console.log('Nghỉ 2 giây trước khi tải chương tiếp theo...');
-            await new Promise(resolve => setTimeout(resolve, 2000));
-        } else {
-            currentUrl = null; // Dừng vòng lặp
-        }
-    }
-
-    console.log('===================================');
-    console.log('✅ Hoàn tất tải toàn bộ các chương!');
-    console.log('===================================');
-}
-
-// Chạy hàm chính
-main().catch(error => {
-    console.error("Đã xảy ra lỗi không mong muốn trong quá trình chạy:", error);
+// Khởi động server
+app.listen(PORT, () => {
+    console.log(`Server khởi động thành công trên cổng: ${PORT}`);
 });
